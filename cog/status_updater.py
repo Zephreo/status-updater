@@ -1,0 +1,182 @@
+import asyncio
+import pickle
+from discord import VoiceChannel
+from discord import app_commands
+import discord
+from discord.ext import commands
+import util
+
+# map of games to emojis, not finalised names
+GAME_EMOJIS = {
+	"Overwatch 2": ":overwatch:",
+	"Baldur's Gate 3": ":bg3:",
+	"7 Days to Die": ":7daystodie:",
+	"Warframe": ":warframe:",
+	"BattleBit Remastered": ":battlebitremastered:",
+	"Yu-Gi-Oh! Master Duel": ":ygomasterduel:",
+	"New World": ":newworld:",
+	"Battlefield 2042": ":battlefield2042:",
+	"Escape from Tarkov": ":escapefromtarkov:",
+	"Minecraft": ":minecraft:",
+	"Terraria": ":terraria:",
+	"Apex Legends": ":apexlegends:",
+	"For Honor": ":forhonor:",
+	"Star Wars: The Old Republic": ":swtor:",
+	"Arma 3": ":arma3:",
+	"Destiny 2": ":destiny2:",
+	"Skyrim Together": ":skyrimtogether:",
+	"Valorant": ":valorant:",
+	"Rainbow Six Siege": ":rainbow6:"
+}
+
+CONFIG_FILE = "config.pkl"
+
+class Data():
+	def __init__(self):
+		self.active = True
+		self.current_message = None
+
+class Config():
+	"""Allows configuration of the bot via commands. Stored to disk."""
+
+	def __init__(self):
+		self._load()
+
+	def _load(self):
+		"""Loads the config pickle from disk."""
+		try:
+			with open(CONFIG_FILE, "rb") as f:
+				self._data = pickle.load(f)
+		except FileNotFoundError:
+			self._data = {}
+
+	def save(self):
+		"""Saves the config to disk."""
+		with open(CONFIG_FILE, "wb") as f:
+			pickle.dump(self._data, f)
+
+	def get(self, key) -> Data:
+		"""Gets a config value."""
+		if key not in self._data:
+			self._data[key] = Data()
+		return self._data.get(key)
+
+	def prune(self, voice_channels: list[VoiceChannel]):
+		"""Removes any config entries for voice channels that no longer exist."""
+		voice_channel_ids = set(vc.id for vc in voice_channels)
+		keys_to_remove = [key for key in self._data if key not in voice_channel_ids]
+		for key in keys_to_remove:
+			print("Removing config for voice channel that no longer exists")
+			self._data.pop(key)
+		return bool(keys_to_remove)
+
+class StatusUpdater(commands.Cog):
+
+	def __init__(self, bot: commands.Bot) -> None:
+		self._bot = bot
+		self._guild = bot.guilds[0]
+		self.config = Config()
+		self._bot.loop.create_task(self.background_task())
+
+	@app_commands.command(name='toggle')
+	async def toggle(
+        self,
+        interaction: discord.Interaction
+    ) -> None:
+		# Check if this is a voice channel
+		if interaction.channel_id not in [vc.id for vc in self._guild.voice_channels]:
+			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
+			return
+		config = self.config.get(interaction.channel_id)
+		config.active = not config.active
+		if config.active:
+			message = "Enabled Voice Status updates for this channel"
+		else:
+			message = "Disabled Voice Status updates for this channel"
+			config.current_message = None
+		self.config.save()
+		await interaction.response.send_message(message, ephemeral=True)
+
+	@app_commands.command(name='update')
+	async def update(self, interaction: discord.Interaction) -> None:
+		# Check if this is a voice channel
+		if interaction.channel_id not in [vc.id for vc in self._guild.voice_channels]:
+			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
+			return
+		await self.update_vc_status(interaction.channel_id)
+		await interaction.response.send_message("Updated Voice Status", ephemeral=True)
+
+	async def background_task(self):
+		await self._bot.wait_until_ready()
+		while not self._bot.is_closed():
+			await self.update_vc_status()
+			await asyncio.sleep(15)
+
+	async def update_vc_status(self, id=None):
+		"""Updates the voice chat status based on the game members are playing."""
+		config_changed = False
+
+		if id is not None:
+			voice_channels = [self._guild.get_channel(id)]
+		else:
+			voice_channels = self._guild.voice_channels
+
+		for voice_channel in voice_channels:
+			# get config for this voice channel
+			config = self.config.get(voice_channel.id)
+
+			if not config.active:
+				continue
+
+			skip_api = False
+
+			# get all members in the voice channel
+			members = voice_channel.members
+			if not members:
+				skip_api = True
+			games = [member.activity.name for member in members if member.activity]
+
+			message = ""
+			if games:
+				games_count = [(game, games.count(game)) for game in set(games)]
+				games_count.sort(key=lambda x: x[1], reverse=True)
+
+				if games_count:
+					message = ":video_game: Misc"
+
+					# Ensure that the highest count is undisputed
+					if len(games_count) == 1 or games_count[0][1] != games_count[1][1]:
+						game = games_count[0][0]
+						if game in GAME_EMOJIS:
+							message = f"{GAME_EMOJIS[game]} "
+						message = message + f"{game}"
+
+			# Check cache for changes
+			if config.current_message == message:
+				continue
+			config.current_message = message
+			config_changed = True
+
+			if not skip_api:
+				print(f"Setting status of '{voice_channel.name}' to '{message}'")
+				success = await util.set_status(voice_channel, message)
+				assert success, "Failed to update voice channel status"
+			else:
+				print(f"Setting cached status of '{voice_channel.name}' to '{message}'")
+
+		if config_changed:
+			self.config.prune(voice_channels)
+			self.config.save()
+
+# https://discord.com/oauth2/authorize?client_id=1151102788420501507&permissions=281477124194320&scope=bot
+
+
+async def setup(bot: commands.Bot) -> None:
+    """A hook for the bot to register the Status Updater cog.
+
+    Args:
+        bot: The bot to add this cog to.
+    """
+
+    await bot.add_cog(StatusUpdater(bot))
+
