@@ -8,25 +8,17 @@ import util
 
 # map of games to emojis, not finalised names
 GAME_EMOJIS = {
-	"Overwatch 2": ":overwatch:",
-	"Baldur's Gate 3": ":bg3:",
-	"7 Days to Die": ":7daystodie:",
-	"Warframe": ":warframe:",
-	"BattleBit Remastered": ":battlebitremastered:",
-	"Yu-Gi-Oh! Master Duel": ":ygomasterduel:",
-	"New World": ":newworld:",
-	"Battlefield 2042": ":battlefield2042:",
-	"Escape from Tarkov": ":escapefromtarkov:",
-	"Minecraft": ":minecraft:",
-	"Terraria": ":terraria:",
-	"Apex Legends": ":apexlegends:",
-	"For Honor": ":forhonor:",
-	"Star Wars: The Old Republic": ":swtor:",
-	"Arma 3": ":arma3:",
-	"Destiny 2": ":destiny2:",
-	"Skyrim Together": ":skyrimtogether:",
-	"Valorant": ":valorant:",
-	"Rainbow Six Siege": ":rainbow6:"
+	"Overwatch 2": "<:overwatch:853544867116744734>",
+	"Baldur's Gate 3": "<:bg3:1151420728957227038>",
+	"BattleBit Remastered": "<:battlebitremastered:966875064437981224>",
+	"Yu-Gi-Oh! Master Duel": "<:ygomasterduel:936950915955576842>",
+	"THE FINALS": "<:thefinals:1169070694131306599>",
+	"Arma III": "<:arma3:853543185091788800>",
+	"Apex Legends": "<:apexlegends:853543185178820608>",
+	"Destiny 2": "<:destiny2:853543185074094121>",
+	"Valorant": "<:valorant:853542233000640542>",
+	"Rainbow Six Siege": "<:rainbow6:853541705223766027>",
+	"Stellaris": "<:stellaris:1170568267614670930>",
 }
 
 CONFIG_FILE = "config.pkl"
@@ -134,7 +126,7 @@ class StatusUpdater(commands.Cog):
 			members = voice_channel.members
 			if not members:
 				skip_api = True
-			games = [member.activity.name for member in members if member.activity]
+			games = [member.activity.name for member in members if member.activity and member.activity.type == discord.ActivityType.playing]
 
 			message = ""
 			if games:
@@ -142,14 +134,15 @@ class StatusUpdater(commands.Cog):
 				games_count.sort(key=lambda x: x[1], reverse=True)
 
 				if games_count:
-					message = ":video_game: Misc"
-
 					# Ensure that the highest count is undisputed
 					if len(games_count) == 1 or games_count[0][1] != games_count[1][1]:
 						game = games_count[0][0]
 						if game in GAME_EMOJIS:
 							message = f"{GAME_EMOJIS[game]} "
 						message = message + f"{game}"
+					else:
+						# If there is more games only show the emojis
+						message = " ".join([f"{GAME_EMOJIS[game]}" for game, count in games_count if game in GAME_EMOJIS])
 
 			# Check cache for changes
 			if config.current_message == message:
