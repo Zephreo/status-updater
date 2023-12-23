@@ -70,7 +70,7 @@ class StatusUpdater(commands.Cog):
 		self.config = Config()
 		self._bot.loop.create_task(self.background_task())
 
-	@app_commands.command(name='toggle')
+	@app_commands.command(name='toggle', description="Toggle Voice Status updates for this channel")
 	async def toggle(
         self,
         interaction: discord.Interaction
@@ -89,7 +89,7 @@ class StatusUpdater(commands.Cog):
 		self.config.save()
 		await interaction.response.send_message(message, ephemeral=True)
 
-	@app_commands.command(name='update')
+	@app_commands.command(name='update', description="Force an update of the Voice Status")
 	async def update(self, interaction: discord.Interaction) -> None:
 		# Check if this is a voice channel
 		if interaction.channel_id not in [vc.id for vc in self._guild.voice_channels]:
