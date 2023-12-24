@@ -11,7 +11,7 @@ GAME_EMOJIS = {
 	"Overwatch 2": "<:overwatch:853544867116744734>",
 	"Baldur's Gate 3": "<:bg3:1151420728957227038>",
 	"BattleBit Remastered": "<:battlebitremastered:966875064437981224>",
-	"Yu-Gi-Oh! Master Duel": "<:ygomasterduel:936950915955576842>",
+	"Yu-Gi-Oh!  Master Duel": "<:ygomasterduel:1188332980867977269>",
 	"THE FINALS": "<:thefinals:1169070694131306599>",
 	"Arma III": "<:arma3:853543185091788800>",
 	"Apex Legends": "<:apexlegends:853543185178820608>",
@@ -19,6 +19,8 @@ GAME_EMOJIS = {
 	"Valorant": "<:valorant:853542233000640542>",
 	"Rainbow Six Siege": "<:rainbow6:853541705223766027>",
 	"Stellaris": "<:stellaris:1170568267614670930>",
+	"Warframe": "<:warframe:1188300388470902845>",
+	"Factorio": "<:factorio:1188365073790554132>",
 }
 
 CONFIG_FILE = "config.pkl"
@@ -128,18 +130,19 @@ class StatusUpdater(commands.Cog):
 				skip_api = True
 			games = []
 			for member in members:
-				game = next((activity for activity in member.activities if activity.type == discord.ActivityType.playing), None)
-				if game:
-					games.append(game.name)
+				# add all games a member is playing to the list (not sure if a user can have more than one)
+				games.extend([activity.name for activity in member.activities if activity.type == discord.ActivityType.playing])
 
 			message = ""
 			if games:
 				games_count = [(game, games.count(game)) for game in set(games)]
 				games_count.sort(key=lambda x: x[1], reverse=True)
 
+				emoji_games = [game for game, count in games_count if game in GAME_EMOJIS]
+
 				if games_count:
-					# Ensure that the highest count is undisputed
-					if len(games_count) == 1 or games_count[0][1] != games_count[1][1]:
+					# Ensure that the highest count is undisputed by at least 2
+					if len(games_count) == 1 or games_count[0][1] - games_count[1][1] > 1:
 						game = games_count[0][0]
 						count = games_count[0][1]
 						if game in GAME_EMOJIS:
@@ -148,6 +151,9 @@ class StatusUpdater(commands.Cog):
 					else:
 						# If there is more games only show the emojis
 						message = " ".join([f"{GAME_EMOJIS[game]}" for game, count in games_count if game in GAME_EMOJIS])
+						# if one emoji, include the game name
+						if len(emoji_games) == 1:
+							message = message + f" {emoji_games[0]}"
 						# if no emojis, show a default message
 						if not message:
 							message = f"Playing {len(games_count)} games"
@@ -157,6 +163,10 @@ class StatusUpdater(commands.Cog):
 				continue
 			config.current_message = message
 			config_changed = True
+
+			if games:
+				games_count = [(game, games.count(game)) for game in set(games)]
+				print(games_count)
 
 			if not skip_api:
 				print(f"Setting status of '{voice_channel.name}' to '{message}'")
