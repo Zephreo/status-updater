@@ -126,7 +126,11 @@ class StatusUpdater(commands.Cog):
 			members = voice_channel.members
 			if not members:
 				skip_api = True
-			games = [member.activity.name for member in members if member.activity and member.activity.type == discord.ActivityType.playing]
+			games = []
+			for member in members:
+				game = next((activity for activity in member.activities if activity.type == discord.ActivityType.playing), None)
+				if game:
+					games.append(game.name)
 
 			message = ""
 			if games:
@@ -137,12 +141,16 @@ class StatusUpdater(commands.Cog):
 					# Ensure that the highest count is undisputed
 					if len(games_count) == 1 or games_count[0][1] != games_count[1][1]:
 						game = games_count[0][0]
+						count = games_count[0][1]
 						if game in GAME_EMOJIS:
 							message = f"{GAME_EMOJIS[game]} "
 						message = message + f"{game}"
 					else:
 						# If there is more games only show the emojis
 						message = " ".join([f"{GAME_EMOJIS[game]}" for game, count in games_count if game in GAME_EMOJIS])
+						# if no emojis, show a default message
+						if not message:
+							message = f"Playing {len(games_count)} games"
 
 			# Check cache for changes
 			if config.current_message == message:
