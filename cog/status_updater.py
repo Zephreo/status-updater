@@ -80,6 +80,7 @@ class StatusUpdater(commands.Cog):
         self,
         interaction: discord.Interaction
     ) -> None:
+		print(f"User '{interaction.user.name}' ran /toggle command for channel '{interaction.channel.name}'")
 		# Check if this is a voice channel
 		if interaction.channel_id not in [vc.id for vc in self._guild.voice_channels]:
 			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
@@ -93,9 +94,11 @@ class StatusUpdater(commands.Cog):
 			config.current_message = None
 		self.config.save()
 		await interaction.response.send_message(message, ephemeral=True)
+		print(f"{message} '{interaction.channel.name}'")
 
 	@app_commands.command(name='update', description="Force an update of the Voice Status")
 	async def update(self, interaction: discord.Interaction) -> None:
+		print(f"User '{interaction.user.name}' ran /update command for channel '{interaction.channel.name}'")
 		# Check if this is a voice channel
 		if interaction.channel_id not in [vc.id for vc in self._guild.voice_channels]:
 			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
@@ -108,7 +111,7 @@ class StatusUpdater(commands.Cog):
 		await self._bot.wait_until_ready()
 		while not self._bot.is_closed():
 			await self.update_vc_status()
-			await asyncio.sleep(15)
+			await asyncio.sleep(5)
 
 	async def update_vc_status(self, id=None, force=False):
 		"""Updates the voice chat status based on the game members are playing."""
@@ -151,7 +154,7 @@ class StatusUpdater(commands.Cog):
 						count = games_count[0][1]
 						if game in GAME_EMOJIS:
 							message = f"{GAME_EMOJIS[game]} "
-						message = message + f"{game}"
+						message = f"{message}{game}"
 					else:
 						# If there is more games only show the emojis
 						message = "  ".join([f"{GAME_EMOJIS[game]}" for game, count in games_count if game in GAME_EMOJIS])
