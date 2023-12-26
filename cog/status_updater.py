@@ -21,6 +21,9 @@ GAME_EMOJIS = {
 	"Stellaris": "<:stellaris:1170568267614670930>",
 	"Warframe": "<:warframe:1188300388470902845>",
 	"Factorio": "<:factorio:1188365073790554132>",
+	"Minecraft": "<:minecraft:853544867132211230>",
+	"RimWorld": "<:rimworld:1189051920845897798>",
+	"Kerbal Space Program 2": "<:ksp2:1189052270747324477>",
 }
 
 CONFIG_FILE = "config.pkl"
@@ -28,7 +31,7 @@ CONFIG_FILE = "config.pkl"
 class Data():
 	def __init__(self):
 		self.active = True
-		self.current_message = None
+		self.current_message = ""
 
 class Config():
 	"""Allows configuration of the bot via commands. Stored to disk."""
@@ -134,6 +137,7 @@ class StatusUpdater(commands.Cog):
 				games.extend([activity.name for activity in member.activities if activity.type == discord.ActivityType.playing])
 
 			message = ""
+			games_count = []
 			if games:
 				games_count = [(game, games.count(game)) for game in set(games)]
 				games_count.sort(key=lambda x: x[1], reverse=True)
@@ -164,9 +168,7 @@ class StatusUpdater(commands.Cog):
 			config.current_message = message
 			config_changed = True
 
-			if games:
-				games_count = [(game, games.count(game)) for game in set(games)]
-				print(games_count)
+			print(games_count)
 
 			if not skip_api:
 				print(f"Setting status of '{voice_channel.name}' to '{message}'")
