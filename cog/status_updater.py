@@ -154,7 +154,7 @@ class StatusUpdater(commands.Cog):
 						message = message + f"{game}"
 					else:
 						# If there is more games only show the emojis
-						message = "".join([f"{GAME_EMOJIS[game]}" for game, count in games_count if game in GAME_EMOJIS])
+						message = "  ".join([f"{GAME_EMOJIS[game]}" for game, count in games_count if game in GAME_EMOJIS])
 						# if one emoji, include the game name
 						if len(emoji_games) == 1:
 							message = message + f" {emoji_games[0]}"
