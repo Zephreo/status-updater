@@ -100,7 +100,8 @@ class StatusUpdater(commands.Cog):
 		if interaction.channel_id not in [vc.id for vc in self._guild.voice_channels]:
 			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
 			return
-		await self.update_vc_status(interaction.channel_id)
+		self.config.get(interaction.channel_id).current_message = None
+		await self.update_vc_status(interaction.channel_id, True)
 		await interaction.response.send_message("Updated Voice Status", ephemeral=True)
 
 	async def background_task(self):
@@ -109,7 +110,7 @@ class StatusUpdater(commands.Cog):
 			await self.update_vc_status()
 			await asyncio.sleep(15)
 
-	async def update_vc_status(self, id=None):
+	async def update_vc_status(self, id=None, force=False):
 		"""Updates the voice chat status based on the game members are playing."""
 		config_changed = False
 
@@ -122,7 +123,7 @@ class StatusUpdater(commands.Cog):
 			# get config for this voice channel
 			config = self.config.get(voice_channel.id)
 
-			if not config.active:
+			if not config.active and not force:
 				continue
 
 			skip_api = False
@@ -149,14 +150,14 @@ class StatusUpdater(commands.Cog):
 						game = games_count[0][0]
 						count = games_count[0][1]
 						if game in GAME_EMOJIS:
-							message = f"{GAME_EMOJIS[game]}   "
+							message = f"{GAME_EMOJIS[game]} "
 						message = message + f"{game}"
 					else:
 						# If there is more games only show the emojis
-						message = " ".join([f"{GAME_EMOJIS[game]}" for game, count in games_count if game in GAME_EMOJIS])
+						message = "".join([f"{GAME_EMOJIS[game]}" for game, count in games_count if game in GAME_EMOJIS])
 						# if one emoji, include the game name
 						if len(emoji_games) == 1:
-							message = message + f"   {emoji_games[0]}"
+							message = message + f" {emoji_games[0]}"
 						# if no emojis, show a default message
 						if not message:
 							message = f"Playing {len(games_count)} games"
@@ -171,8 +172,8 @@ class StatusUpdater(commands.Cog):
 
 			if not skip_api:
 				print(f"Setting status of '{voice_channel.name}' to '{message}'")
-				success = await util.set_status(voice_channel, message)
-				assert success, "Failed to update voice channel status"
+				success, response = await util.set_status(voice_channel, message)
+				assert success, f"Failed to update voice channel status for '{voice_channel.name}' with status code '{response.status_code}'\n {response}"
 			else:
 				print(f"Setting cached status of '{voice_channel.name}' to '{message}'")
 
@@ -181,7 +182,6 @@ class StatusUpdater(commands.Cog):
 			self.config.save()
 
 # https://discord.com/oauth2/authorize?client_id=1151102788420501507&permissions=281477124194320&scope=bot
-
 
 async def setup(bot: commands.Bot) -> None:
     """A hook for the bot to register the Status Updater cog.

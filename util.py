@@ -23,7 +23,7 @@ async def get_nth_msg(
     ][n - 1]
 
 VOICE_STATUS_URL = "https://discord.com/api/v10/channels/:channelId/voice-status"
-async def set_status(channel: discord.VoiceChannel, message: str) -> None:
+async def set_status(channel: discord.VoiceChannel, message: str) -> tuple[bool, requests.Response]:
     """Sets the status of a voice channel.
 
     Args:
@@ -45,4 +45,4 @@ async def set_status(channel: discord.VoiceChannel, message: str) -> None:
 
     response = requests.put(url, headers=headers, json=data)
 
-    return response.status_code == 204
+    return response.status_code == 204, response
