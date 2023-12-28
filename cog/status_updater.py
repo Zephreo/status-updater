@@ -5,6 +5,7 @@ from discord import app_commands
 import discord
 from discord.ext import commands
 import util
+import logging
 
 # map of games to emojis, not finalised names
 GAME_EMOJIS = {
@@ -36,7 +37,8 @@ class Data():
 class Config():
 	"""Allows configuration of the bot via commands. Stored to disk."""
 
-	def __init__(self):
+	def __init__(self, logger: logging.Logger):
+		self.log = logger
 		self._load()
 
 	def _load(self):
@@ -63,7 +65,7 @@ class Config():
 		voice_channel_ids = set(vc.id for vc in voice_channels)
 		keys_to_remove = [key for key in self._data if key not in voice_channel_ids]
 		for key in keys_to_remove:
-			print("Removing config for voice channel that no longer exists")
+			self.log.debug("Removing config for voice channel that no longer exists")
 			self._data.pop(key)
 		return bool(keys_to_remove)
 
@@ -72,7 +74,9 @@ class StatusUpdater(commands.Cog):
 	def __init__(self, bot: commands.Bot) -> None:
 		self._bot = bot
 		self._guild = bot.guilds[0]
-		self.config = Config()
+		self.log = logging.getLogger('discord')
+		self.log.setLevel(logging.DEBUG)
+		self.config = Config(self.log)
 		self._bot.loop.create_task(self.background_task())
 
 	@app_commands.command(name='toggle', description="Toggle Voice Status updates for this channel")
@@ -80,7 +84,7 @@ class StatusUpdater(commands.Cog):
         self,
         interaction: discord.Interaction
     ) -> None:
-		print(f"User '{interaction.user.name}' ran /toggle command for channel '{interaction.channel.name}'")
+		self.log.info(f"User '{interaction.user.name}' ran /toggle command for channel '{getattr(interaction.channel, 'name', None)}'")
 		# Check if this is a voice channel
 		if interaction.channel_id not in [vc.id for vc in self._guild.voice_channels]:
 			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
@@ -94,11 +98,11 @@ class StatusUpdater(commands.Cog):
 			config.current_message = None
 		self.config.save()
 		await interaction.response.send_message(message, ephemeral=True)
-		print(f"{message} '{interaction.channel.name}'")
+		self.log.info(f"{message} '{interaction.channel.name}'")
 
 	@app_commands.command(name='update', description="Force an update of the Voice Status")
 	async def update(self, interaction: discord.Interaction) -> None:
-		print(f"User '{interaction.user.name}' ran /update command for channel '{interaction.channel.name}'")
+		self.log.info(f"User '{interaction.user.name}' ran /update command for channel '{getattr(interaction.channel, 'name', None)}'")
 		# Check if this is a voice channel
 		if interaction.channel_id not in [vc.id for vc in self._guild.voice_channels]:
 			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
@@ -106,6 +110,23 @@ class StatusUpdater(commands.Cog):
 		self.config.get(interaction.channel_id).current_message = None
 		await self.update_vc_status(interaction.channel_id, True)
 		await interaction.response.send_message("Updated Voice Status", ephemeral=True)
+
+	@app_commands.command(name='debug', description="Debug the current voice channel status")
+	async def debug(self, interaction: discord.Interaction) -> None:
+		self.log.info(f"User '{interaction.user.name}' ran /debug command for channel '{getattr(interaction.channel, 'name', None)}'")
+		# Check if this is a voice channel
+		if interaction.channel_id not in [vc.id for vc in self._guild.voice_channels]:
+			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
+			return
+		channel = self._guild.get_channel(interaction.channel_id)
+		config = self.config.get(interaction.channel_id)
+		members = channel.members
+		activities = [(member.name, activity) for member in members for activity in member.activities]
+		games = [activity.name for member in members for activity in member.activities if activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming]
+		games_count = [(game, games.count(game)) for game in set(games)]
+		games_count.sort(key=lambda x: x[1], reverse=True)
+		message = f"All activities: {activities}\nTracked games: {games_count}\nConfig: {config.__dict__}"
+		await interaction.response.send_message(message, ephemeral=True)
 
 	async def background_task(self):
 		await self._bot.wait_until_ready()
@@ -135,10 +156,9 @@ class StatusUpdater(commands.Cog):
 			members = voice_channel.members
 			if not members:
 				skip_api = True
-			games = []
-			for member in members:
-				# add all games a member is playing to the list (not sure if a user can have more than one)
-				games.extend([activity.name for activity in member.activities if activity.type == discord.ActivityType.playing])
+
+			# add all games a user is playing to the list (not sure if a user can have more than one)
+			games = [activity.name for member in members for activity in member.activities if activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming]
 
 			message = ""
 			games_count = []
@@ -171,14 +191,15 @@ class StatusUpdater(commands.Cog):
 			config.current_message = message
 			config_changed = True
 
-			print(games_count)
+			self.log.debug(games_count)
 
 			if not skip_api:
-				print(f"Setting status of '{voice_channel.name}' to '{message}'")
+				self.log.info(f"Setting status of '{voice_channel.name}' to '{message}'")
 				success, response = await util.set_status(voice_channel, message)
-				assert success, f"Failed to update voice channel status for '{voice_channel.name}' with status code '{response.status_code}'\n {response}"
+				if not success:
+					self.log.error(f"Failed to update voice channel status for '{voice_channel.name}' with status code '{response.status_code}'\n {response}")
 			else:
-				print(f"Setting cached status of '{voice_channel.name}' to '{message}'")
+				self.log.info(f"Setting cached status of '{voice_channel.name}' to '{message}'")
 
 		if config_changed:
 			self.config.prune(voice_channels)
