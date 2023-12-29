@@ -174,3 +174,4 @@ poetry.toml
 
 data.json
 config.pkl
+.DS_Store

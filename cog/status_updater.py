@@ -65,7 +65,7 @@ class Config():
 		voice_channel_ids = set(vc.id for vc in voice_channels)
 		keys_to_remove = [key for key in self._data if key not in voice_channel_ids]
 		for key in keys_to_remove:
-			self.log.debug("Removing config for voice channel that no longer exists")
+			self.log.info("Removing config for voice channel that no longer exists")
 			self._data.pop(key)
 		return bool(keys_to_remove)
 
@@ -74,8 +74,7 @@ class StatusUpdater(commands.Cog):
 	def __init__(self, bot: commands.Bot) -> None:
 		self._bot = bot
 		self._guild = bot.guilds[0]
-		self.log = logging.getLogger('discord')
-		self.log.setLevel(logging.DEBUG)
+		self.log = util.setup_logging()
 		self.config = Config(self.log)
 		self._bot.loop.create_task(self.background_task())
 
@@ -191,7 +190,7 @@ class StatusUpdater(commands.Cog):
 			config.current_message = message
 			config_changed = True
 
-			self.log.debug(games_count)
+			self.log.info(games_count)
 
 			if not skip_api:
 				self.log.info(f"Setting status of '{voice_channel.name}' to '{message}'")
