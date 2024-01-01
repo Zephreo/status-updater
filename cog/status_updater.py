@@ -25,6 +25,7 @@ GAME_EMOJIS = {
 	"Minecraft": "<:minecraft:853544867132211230>",
 	"RimWorld": "<:rimworld:1189051920845897798>",
 	"Kerbal Space Program 2": "<:ksp2:1189052270747324477>",
+	"Genshin Impact": "<:genshin:1191258304836554894>",
 }
 
 CONFIG_FILE = "config.pkl"
