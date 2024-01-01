@@ -106,6 +106,9 @@ class StatusUpdater(commands.Cog):
 		if interaction.channel_id not in [vc.id for vc in self._guild.voice_channels]:
 			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
 			return
+		# force a cache update for each member in the channel
+		for member in interaction.channel.members:
+			await self._guild.fetch_member(member.id)
 		self.config.get(interaction.channel_id).current_message = None
 		await self.update_vc_status(interaction.channel_id, True)
 		await interaction.response.send_message("Updated Voice Status", ephemeral=True)
