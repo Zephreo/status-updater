@@ -17,7 +17,7 @@ GAME_EMOJIS = {
 	"Arma III": "<:arma3:853543185091788800>",
 	"Apex Legends": "<:apexlegends:853543185178820608>",
 	"Destiny 2": "<:destiny2:853543185074094121>",
-	"Valorant": "<:valorant:853542233000640542>",
+	"VALORANT": "<:valorant:853542233000640542>",
 	"Rainbow Six Siege": "<:rainbow6:853541705223766027>",
 	"Stellaris": "<:stellaris:1170568267614670930>",
 	"Warframe": "<:warframe:1188300388470902845>",
