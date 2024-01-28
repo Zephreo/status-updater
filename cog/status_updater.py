@@ -56,7 +56,7 @@ class Config():
 	def _load(self):
 		"""Loads the config json from disk."""
 		try:
-			with open(CONFIG_FILE, "x") as f:
+			with open(CONFIG_FILE, "r") as f:
 				self._data = json.load(f)
 		except FileNotFoundError:
 			self._data = {}
