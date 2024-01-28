@@ -29,6 +29,7 @@ GAME_EMOJIS = {
 	"RimWorld": "<:rimworld:1189051920845897798>",
 	"Kerbal Space Program 2": "<:ksp2:1189052270747324477>",
 	"Genshin Impact": "<:genshin:1191258304836554894>",
+	"Palworld": "<:palworld:1200739801763172423>",
 }
 
 CONFIG_FILE = "config.json"
