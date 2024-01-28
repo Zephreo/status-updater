@@ -69,21 +69,21 @@ class Config():
 
 	def get_guild(self, guild: int) -> GuildData:
 		"""Gets a config value."""
-		if guild not in self._data["guilds"]:
+		if str(guild) not in self._data["guilds"]:
 			self._data["guilds"][str(guild)] = GuildData(channels={}, emojis=GAME_EMOJIS)
 		return self._data["guilds"][str(guild)]
 
 	def get_channel(self, guild: int, channel: int) -> ChannelData:
 		"""Gets a config value."""
 		guild_data = self.get_guild(guild)
-		if channel not in guild_data["channels"]:
+		if str(channel) not in guild_data["channels"]:
 			guild_data["channels"][str(channel)] = ChannelData(active=True, current_message="")
 		return guild_data["channels"][str(channel)]
 
 	def prune(self, guild: int, voice_channels: list[VoiceChannel]):
 		"""Removes any config entries for voice channels that no longer exist."""
 		guild_data = self.get_guild(guild)
-		voice_channel_ids = set(vc.id for vc in voice_channels)
+		voice_channel_ids = set(str(vc.id) for vc in voice_channels)
 		keys_to_remove = [key for key in guild_data["channels"].keys() if key not in voice_channel_ids]
 		for key in keys_to_remove:
 			self.log.info("Removing config for voice channel that no longer exists")
