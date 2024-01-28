@@ -58,8 +58,9 @@ class Config():
 		try:
 			with open(CONFIG_FILE, "r") as f:
 				self._data = json.load(f)
-		except FileNotFoundError:
-			self._data = {}
+		except (json.decoder.JSONDecodeError, FileNotFoundError):
+			self._data = ConfigFile(guilds={})
+			self.save()
 
 	def save(self):
 		"""Saves the config to disk."""
@@ -150,7 +151,7 @@ class StatusUpdater(commands.Cog):
 		games = [activity.name for member in members for activity in member.activities if activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming]
 		games_count = [(game, games.count(game)) for game in set(games)]
 		games_count.sort(key=lambda x: x[1], reverse=True)
-		message = f"All activities: {activities}\nTracked games: {games_count}\nConfig: {config.__dict__}"
+		message = f"All activities: {activities}\nTracked games: {games_count}\nConfig: {config}"
 		await interaction.response.send_message(message, ephemeral=True)
 
 	@app_commands.command(name='emoji', description="Add or Remove an emoji to your current game")
@@ -171,13 +172,13 @@ class StatusUpdater(commands.Cog):
 		if len(tracked_games) > 1:
 			await interaction.response.send_message("You are playing multiple games. Aborting..", ephemeral=True)
 			return
-		if action is "remove":
+		if action == "remove":
 			if game not in config["emojis"]:
 				await interaction.response.send_message(f"You have not added an emoji for this game. {game}", ephemeral=True)
 				return
 			emoji = config["emojis"].pop(game)
 			await interaction.response.send_message(f"Removed emoji {emoji} for game {game}", ephemeral=True)
-		elif action is "add":
+		elif action == "add":
 			if emoji is None or emoji.strip() == "" or " " in emoji:
 				await interaction.response.send_message("Invalid emoji", ephemeral=True)
 				return
