@@ -39,11 +39,11 @@ class ChannelData(TypedDict):
 	current_message: str | None
 
 class GuildData(TypedDict):
-	channels: Dict[int, ChannelData]
+	channels: Dict[str, ChannelData]
 	emojis: Dict[str, str]
 
 class ConfigFile(TypedDict):
-	guilds: Dict[int, GuildData]
+	guilds: Dict[str, GuildData]
 
 class Config():
 	"""Allows configuration of the bot via commands. Stored to disk."""
@@ -70,15 +70,15 @@ class Config():
 	def get_guild(self, guild: int) -> GuildData:
 		"""Gets a config value."""
 		if guild not in self._data["guilds"]:
-			self._data["guilds"][guild] = GuildData(channels={}, emojis=GAME_EMOJIS)
-		return self._data["guilds"][guild]
+			self._data["guilds"][str(guild)] = GuildData(channels={}, emojis=GAME_EMOJIS)
+		return self._data["guilds"][str(guild)]
 
 	def get_channel(self, guild: int, channel: int) -> ChannelData:
 		"""Gets a config value."""
 		guild_data = self.get_guild(guild)
 		if channel not in guild_data["channels"]:
-			guild_data["channels"][channel] = ChannelData(active=True, current_message="")
-		return guild_data["channels"][channel]
+			guild_data["channels"][str(channel)] = ChannelData(active=True, current_message="")
+		return guild_data["channels"][str(channel)]
 
 	def prune(self, guild: int, voice_channels: list[VoiceChannel]):
 		"""Removes any config entries for voice channels that no longer exist."""
@@ -189,7 +189,6 @@ class StatusUpdater(commands.Cog):
 	@app_commands.command(name='reload', description="Restart the bot cause it broke")
 	async def reload(self, interaction: discord.Interaction) -> None:
 		self.log.warn(f"User '{interaction.user.name}' ran /reload command for channel '{getattr(interaction.channel, 'name', None)}'")
-		self.config.save()
 		await interaction.response.send_message("Reloading...")
 		os.execv(sys.executable, ['python'] + sys.argv)
 
