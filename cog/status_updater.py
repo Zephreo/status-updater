@@ -158,17 +158,20 @@ class StatusUpdater(commands.Cog):
 	async def emoji(self, interaction: discord.Interaction, action: Literal["add", "remove"], emoji: str | None) -> None:
 		self.log.info(f"User '{interaction.user.name}' ran /emoji command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
-		user = interaction.user
 		# Check if this is a voice channel
-		if guild is None or not isinstance(user, discord.Member):
+		if guild is None:
 			await interaction.response.send_message("Must be run in the server where the emoji is to be added", ephemeral=True)
 			return
+		member = guild.get_member(interaction.user.id)
+		if member is None:
+			await interaction.response.send_message("Failed to get user data", ephemeral=True)
+			return
 		config = self.config.get_guild(guild.id)
-		tracked_games = [activity.name for activity in user.activities if activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming]
-		game = tracked_games[0]
-		if not tracked_games or game is None:
+		tracked_games = [activity.name for activity in member.activities if activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming]
+		if not tracked_games or len(tracked_games) < 1 or tracked_games[0] is None:
 			await interaction.response.send_message("You are not playing any games.", ephemeral=True)
 			return
+		game = tracked_games[0]
 		if len(tracked_games) > 1:
 			await interaction.response.send_message("You are playing multiple games. Aborting..", ephemeral=True)
 			return
@@ -177,13 +180,15 @@ class StatusUpdater(commands.Cog):
 				await interaction.response.send_message(f"You have not added an emoji for this game. {game}", ephemeral=True)
 				return
 			emoji = config["emojis"].pop(game)
-			await interaction.response.send_message(f"Removed emoji {emoji} for game {game}", ephemeral=True)
+			await interaction.response.send_message(f"Removed emoji {emoji} for game {game}")
+			self.log.info(f"Removed emoji {emoji} for game {game}")
 		elif action == "add":
 			if emoji is None or emoji.strip() == "" or " " in emoji:
 				await interaction.response.send_message("Invalid emoji", ephemeral=True)
 				return
 			config["emojis"][game] = emoji
-			await interaction.response.send_message(f"Added emoji {emoji} for game {game}", ephemeral=True)
+			await interaction.response.send_message(f"Added emoji {emoji} for game {game}")
+			self.log.info(f"Added emoji {emoji} for game {game}")
 		self.config.save()
 
 	@app_commands.command(name='reload', description="Restart the bot cause it broke")
