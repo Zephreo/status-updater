@@ -10,40 +10,27 @@ from typing import TypedDict, Dict, Literal
 import os
 import sys
 
-# map of games to emojis, not finalised names
-GAME_EMOJIS = {
-	"Overwatch 2": "<:overwatch:853544867116744734>",
-	"Baldur's Gate 3": "<:bg3:1151420728957227038>",
-	"BattleBit Remastered": "<:battlebitremastered:966875064437981224>",
-	"Yu-Gi-Oh!  Master Duel": "<:ygomasterduel:1188332980867977269>",
-	"THE FINALS": "<:thefinals:1169070694131306599>",
-	"Arma III": "<:arma3:853543185091788800>",
-	"Apex Legends": "<:apexlegends:853543185178820608>",
-	"Destiny 2": "<:destiny2:853543185074094121>",
-	"VALORANT": "<:valorant:853542233000640542>",
-	"Rainbow Six Siege": "<:rainbow6:853541705223766027>",
-	"Stellaris": "<:stellaris:1170568267614670930>",
-	"Warframe": "<:warframe:1188300388470902845>",
-	"Factorio": "<:factorio:1188365073790554132>",
-	"Minecraft": "<:minecraft:853544867132211230>",
-	"RimWorld": "<:rimworld:1189051920845897798>",
-	"Kerbal Space Program 2": "<:ksp2:1189052270747324477>",
-	"Genshin Impact": "<:genshin:1191258304836554894>",
-	"Palworld": "<:palworld:1200739801763172423>",
-}
-
 CONFIG_FILE = "config.json"
 
 class ChannelData(TypedDict):
 	active: bool
 	current_message: str | None
 
+class EmojiData(TypedDict):
+	emoji: str
+	display_name: str | None
+
 class GuildData(TypedDict):
 	channels: Dict[str, ChannelData]
-	emojis: Dict[str, str]
+	emojis: Dict[str, EmojiData]
 
 class ConfigFile(TypedDict):
 	guilds: Dict[str, GuildData]
+
+class GameInfo:
+	emoji: str | None
+	count: int
+	name: str
 
 class Config():
 	"""Allows configuration of the bot via commands. Stored to disk."""
@@ -70,7 +57,7 @@ class Config():
 	def get_guild(self, guild: int) -> GuildData:
 		"""Gets a config value."""
 		if str(guild) not in self._data["guilds"]:
-			self._data["guilds"][str(guild)] = GuildData(channels={}, emojis=GAME_EMOJIS)
+			self._data["guilds"][str(guild)] = GuildData(channels={}, emojis={})
 		return self._data["guilds"][str(guild)]
 
 	def get_channel(self, guild: int, channel: int) -> ChannelData:
@@ -89,6 +76,41 @@ class Config():
 			self.log.info("Removing config for voice channel that no longer exists")
 			guild_data["channels"].pop(key)
 		return bool(keys_to_remove)
+
+def find_alias(emojis: dict[str, GameInfo], emoji: str):
+	for game, data in emojis.items():
+		if emoji == data.emoji:
+			return game, data
+
+def calculate_game_info(members: list[discord.Member], emojis: dict[str, EmojiData]):
+	games = [activity.name for member in members for activity in member.activities if (activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming) and activity.name]
+	if not games:
+		return None
+	game_info: dict[str, GameInfo] = {}
+	for game in set(games):
+		info = GameInfo()
+		info.name = game
+		info.count = 1
+		info.emoji = None
+		if game in game_info:
+			info = game_info[game]
+			info.count += 1
+		config = None
+		if game in emojis:
+			config = emojis[game]
+		if config is not None:
+			info.emoji = config["emoji"]
+			temp = find_alias(game_info, config["emoji"])
+			if temp is not None:
+				game, alias = temp
+				if config["display_name"] is not None:
+					alias.name = config["display_name"]
+				info = alias
+				info.count += 1
+		game_info[game] = info
+	games_count = [info for game, info in game_info.items()]
+	games_count.sort(key=lambda x: x.count, reverse=True)
+	return games_count
 
 class StatusUpdater(commands.Cog):
 
@@ -145,17 +167,17 @@ class StatusUpdater(commands.Cog):
 		if channel is None or not isinstance(channel, VoiceChannel) or interaction.channel_id not in [vc.id for vc in guild.voice_channels]:
 			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
 			return
+		guild_config = self.config.get_guild(guild.id)
 		config = self.config.get_channel(guild.id, interaction.channel_id)
 		members = channel.members
-		activities = [(member.name, activity) for member in members for activity in member.activities]
-		games = [activity.name for member in members for activity in member.activities if activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming]
-		games_count = [(game, games.count(game)) for game in set(games)]
-		games_count.sort(key=lambda x: x[1], reverse=True)
+		activities = [(member.name, activity.name) for member in members for activity in member.activities]
+		games_count = calculate_game_info(members, guild_config["emojis"])
 		message = f"All activities: {activities}\nTracked games: {games_count}\nConfig: {config}"
+		self.log.info(message)
 		await interaction.response.send_message(message, ephemeral=True)
 
 	@app_commands.command(name='emoji', description="Add or Remove an emoji to your current game")
-	async def emoji(self, interaction: discord.Interaction, action: Literal["add", "remove"], emoji: str | None) -> None:
+	async def emoji(self, interaction: discord.Interaction, action: Literal["add", "remove"], emoji: str | None, display_name: str | None) -> None:
 		self.log.info(f"User '{interaction.user.name}' ran /emoji command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
 		# Check if this is a voice channel
@@ -179,14 +201,14 @@ class StatusUpdater(commands.Cog):
 			if game not in config["emojis"]:
 				await interaction.response.send_message(f"You have not added an emoji for this game. {game}", ephemeral=True)
 				return
-			emoji = config["emojis"].pop(game)
+			emoji = config["emojis"].pop(game)["emoji"]
 			await interaction.response.send_message(f"Removed emoji {emoji} for game {game}")
 			self.log.info(f"Removed emoji {emoji} for game {game}")
 		elif action == "add":
 			if emoji is None or emoji.strip() == "" or " " in emoji:
 				await interaction.response.send_message("Invalid emoji", ephemeral=True)
 				return
-			config["emojis"][game] = emoji
+			config["emojis"][game] = { 'emoji': emoji, 'display_name': display_name }
 			await interaction.response.send_message(f"Added emoji {emoji} for game {game}")
 			self.log.info(f"Added emoji {emoji} for game {game}")
 		self.config.save()
@@ -232,33 +254,26 @@ class StatusUpdater(commands.Cog):
 			if not members:
 				skip_api = True
 
-			# add all games a user is playing to the list (not sure if a user can have more than one)
-			games = [activity.name for member in members for activity in member.activities if activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming]
+			games_count = calculate_game_info(members, emojis)
 
 			message = ""
-			games_count = []
-			if games:
-				games_count = [(game, games.count(game)) for game in set(games)]
-				games_count.sort(key=lambda x: x[1], reverse=True)
+			if games_count:
+				emoji_games = [info for info in games_count if info.emoji]
 
-				emoji_games = [game for game, count in games_count if game in emojis]
-
-				if games_count:
-					if len(games_count) == 1:
-						game = games_count[0][0]
-						count = games_count[0][1]
-						if game in emojis:
-							message = f"{emojis[game]} "
-						message = f"{message}{game}"
-					else:
-						# If there is more games only show the emojis
-						message = " ".join([f"{emojis[game]}" for game, count in games_count if game in emojis])
-						# if one emoji, include the game name
-						if len(emoji_games) == 1:
-							message = message + f" {emoji_games[0]}"
-						# if no emojis, show a default message
-						if not message:
-							message = f"Playing {len(games_count)} games"
+				if len(games_count) == 1:
+					info = games_count[0]
+					if info.emoji is not None:
+						message = f"{info.emoji} "
+					message = f"{message}{info.name}"
+				else:
+					# If there is more games only show the emojis
+					message = " ".join([f"{info.emoji}" for info in games_count if info.emoji is not None])
+					# if one emoji, include the game name
+					if len(emoji_games) == 1:
+						message = message + f" {emoji_games[0].name}"
+					# if no emojis, show a default message
+					if not message:
+						message = f"Playing {len(games_count)} games"
 
 			# Check cache for changes
 			if channel_config["current_message"] == message:
@@ -266,7 +281,7 @@ class StatusUpdater(commands.Cog):
 			channel_config["current_message"] = message
 			config_changed = True
 
-			self.log.info(games_count)
+			self.log.info([(info.name, info.count) for info in games_count])
 
 			if not skip_api:
 				self.log.info(f"Setting status of '{voice_channel.name}' to '{message}'")
