@@ -99,6 +99,8 @@ def calculate_game_info(members: list[discord.Member], emojis: dict[str, EmojiDa
 		if game in emojis:
 			config = emojis[game]
 		if config is not None:
+			if config["display_name"] is not None:
+				info.name = config["display_name"]
 			info.emoji = config["emoji"]
 			temp = find_alias(game_info, config["emoji"])
 			if temp is not None:
@@ -172,7 +174,8 @@ class StatusUpdater(commands.Cog):
 		members = channel.members
 		activities = [(member.name, activity.name) for member in members for activity in member.activities]
 		games_count = calculate_game_info(members, guild_config["emojis"])
-		message = f"All activities: {activities}\nTracked games: {games_count}\nConfig: {config}"
+		tracked = [(info.name, info.count) for info in games_count]
+		message = f"All activities: {activities}\nTracked games: {tracked}\nConfig: {config}"
 		self.log.info(message)
 		await interaction.response.send_message(message, ephemeral=True)
 
