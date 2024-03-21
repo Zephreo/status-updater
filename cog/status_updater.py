@@ -99,13 +99,13 @@ def calculate_game_info(members: list[discord.Member], emojis: dict[str, EmojiDa
 		if game in emojis:
 			config = emojis[game]
 		if config is not None:
-			if config["display_name"] is not None:
+			if "display_name" in config:
 				info.name = config["display_name"]
 			info.emoji = config["emoji"]
 			temp = find_alias(game_info, config["emoji"])
 			if temp is not None:
 				game, alias = temp
-				if config["display_name"] is not None:
+				if "display_name" in config:
 					alias.name = config["display_name"]
 				info = alias
 				info.count += 1
