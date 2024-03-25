@@ -99,13 +99,13 @@ def calculate_game_info(members: list[discord.Member], emojis: dict[str, EmojiDa
 		if game in emojis:
 			config = emojis[game]
 		if config is not None:
-			if "display_name" in config:
+			if "display_name" in config and config["display_name"] is not None:
 				info.name = config["display_name"]
 			info.emoji = config["emoji"]
 			temp = find_alias(game_info, config["emoji"])
 			if temp is not None:
 				game, alias = temp
-				if "display_name" in config:
+				if "display_name" in config and config["display_name"] is not None:
 					alias.name = config["display_name"]
 				info = alias
 				info.count += 1
@@ -211,7 +211,10 @@ class StatusUpdater(commands.Cog):
 			if emoji is None or emoji.strip() == "" or " " in emoji:
 				await interaction.response.send_message("Invalid emoji", ephemeral=True)
 				return
-			config["emojis"][game] = { 'emoji': emoji, 'display_name': display_name }
+			emoji_obj: EmojiData = { 'emoji': emoji }
+			if display_name is not None:
+				emoji_obj['display_name'] = display_name
+			config["emojis"][game] = emoji_obj
 			await interaction.response.send_message(f"Added emoji {emoji} for game {game}")
 			self.log.info(f"Added emoji {emoji} for game {game}")
 		self.config.save()
@@ -284,7 +287,8 @@ class StatusUpdater(commands.Cog):
 			channel_config["current_message"] = message
 			config_changed = True
 
-			self.log.info([(info.name, info.count) for info in games_count])
+			if games_count:
+				self.log.info([(info.name, info.count) for info in games_count])
 
 			if not skip_api:
 				self.log.info(f"Setting status of '{voice_channel.name}' to '{message}'")
