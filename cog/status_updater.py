@@ -82,10 +82,10 @@ def find_alias(emojis: dict[str, GameInfo], emoji: str):
 		if emoji == data.emoji:
 			return game, data
 
-def calculate_game_info(members: list[discord.Member], emojis: dict[str, EmojiData]):
+def calculate_game_info(members: list[discord.Member], emojis: dict[str, EmojiData]) -> list[GameInfo]:
 	games = [activity.name for member in members for activity in member.activities if (activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming) and activity.name]
 	if not games:
-		return None
+		return []
 	game_info: dict[str, GameInfo] = {}
 	for game in set(games):
 		info = GameInfo()
