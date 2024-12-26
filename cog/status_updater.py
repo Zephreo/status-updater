@@ -6,6 +6,7 @@ import discord
 from discord.ext import commands
 import util
 import logging
+from typing_extensions import NotRequired
 from typing import TypedDict, Dict, Literal
 import os
 import sys
@@ -18,7 +19,7 @@ class ChannelData(TypedDict):
 
 class EmojiData(TypedDict):
 	emoji: str
-	display_name: str | None
+	display_name: NotRequired[str]
 
 class GuildData(TypedDict):
 	channels: Dict[str, ChannelData]
@@ -180,14 +181,31 @@ class StatusUpdater(commands.Cog):
 		await interaction.response.send_message(message, ephemeral=True)
 
 	@app_commands.command(name='emoji', description="Add or Remove an emoji to your current game")
-	async def emoji(self, interaction: discord.Interaction, action: Literal["add", "remove"], emoji: str | None, display_name: str | None) -> None:
+	@app_commands.describe(
+        action="Whether to add or remove an emoji",
+        emoji="The emoji to add (ignored if removing)",
+        display_name="Override the game name with a custom display name",
+        target_user="The user whose game you want to target (defaults to you if omitted)"
+    )
+	async def emoji(
+		self,
+		interaction: discord.Interaction,
+		action: Literal["add", "remove"],
+		emoji: str | None,
+		display_name: str | None,
+		target_user: discord.User | None
+	) -> None:
+		"""Adds or removes an emoji for a user's currently active game."""
 		self.log.info(f"User '{interaction.user.name}' ran /emoji command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
 		# Check if this is a voice channel
 		if guild is None:
 			await interaction.response.send_message("Must be run in the server where the emoji is to be added", ephemeral=True)
 			return
-		member = guild.get_member(interaction.user.id)
+		if target_user is None:
+			member = guild.get_member(interaction.user.id)
+		else:
+			member = guild.get_member(target_user.id)
 		if member is None:
 			await interaction.response.send_message("Failed to get user data", ephemeral=True)
 			return
@@ -221,7 +239,7 @@ class StatusUpdater(commands.Cog):
 
 	@app_commands.command(name='reload', description="Restart the bot cause it broke")
 	async def reload(self, interaction: discord.Interaction) -> None:
-		self.log.warn(f"User '{interaction.user.name}' ran /reload command for channel '{getattr(interaction.channel, 'name', None)}'")
+		self.log.warning(f"User '{interaction.user.name}' ran /reload command for channel '{getattr(interaction.channel, 'name', None)}'")
 		await interaction.response.send_message("Reloading...")
 		os.execv(sys.executable, ['python'] + sys.argv)
 
