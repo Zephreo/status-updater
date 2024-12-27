@@ -11,6 +11,8 @@ from typing import TypedDict, Dict, Literal
 import os
 import sys
 
+from cog.get_icon import IconList
+
 CONFIG_FILE = "config.json"
 
 class ChannelData(TypedDict):
@@ -122,6 +124,7 @@ class StatusUpdater(commands.Cog):
 		self.log = util.setup_logging()
 		self.config = Config(self.log)
 		self._bot.loop.create_task(self.background_task())
+		self.icon_list = IconList(self.log) # load last
 
 	@app_commands.command(name='toggle', description="Toggle Voice Status updates for this channel")
 	async def toggle(
@@ -236,6 +239,37 @@ class StatusUpdater(commands.Cog):
 			await interaction.response.send_message(f"Added emoji {emoji} for game {game}")
 			self.log.info(f"Added emoji {emoji} for game {game}")
 		self.config.save()
+
+	@app_commands.command(name='get_icon', description="Get the link to your current game's icon if it exists")
+	@app_commands.describe(
+        target_user="The user whose game you want to target (defaults to you if omitted)"
+    )
+	async def get_icon(self, interaction: discord.Interaction, target_user: discord.User | None) -> None:
+		self.log.info(f"User '{interaction.user.name}' ran /get_icon command for channel '{getattr(interaction.channel, 'name', None)}'")
+		guild = interaction.guild
+		if guild is None:
+			await interaction.response.send_message("Must be run in a server to fetch activity data from user", ephemeral=True)
+			return
+		if target_user is None:
+			member = guild.get_member(interaction.user.id)
+		else:
+			member = guild.get_member(target_user.id)
+		if member is None:
+			await interaction.response.send_message("Failed to get user data", ephemeral=True)
+			return
+		tracked_games = [activity for activity in member.activities if activity.type == discord.ActivityType.playing]
+		if not tracked_games or len(tracked_games) < 1 or tracked_games[0] is None:
+			await interaction.response.send_message("User is not playing any games.", ephemeral=True)
+			return
+		game = tracked_games[0]
+		if not isinstance(game, (discord.Activity, discord.Game)):
+			await interaction.response.send_message("Unable to get game url for this user.", ephemeral=True)
+			return
+		icon_url = self.icon_list.get_game_image(game)
+		if icon_url is None:
+			await interaction.response.send_message("Unable to get game url for this game.", ephemeral=True)
+			return
+		await interaction.response.send_message(icon_url, ephemeral=True)
 
 	@app_commands.command(name='reload', description="Restart the bot cause it broke")
 	async def reload(self, interaction: discord.Interaction) -> None:

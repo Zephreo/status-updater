@@ -48,8 +48,15 @@ async def set_status(channel: discord.VoiceChannel, message: str) -> tuple[bool,
 
     return response.status_code == 204, response
 
+def check_resource_exists(url: str):
+    with requests.Session() as session:
+        # _LOGGER.debug("Checking if web resource [%s] exists", url)
+        with session.head(url) as response:
+            # _LOGGER.debug("Resource [%s] response status = %s", url, response.status)
+            return response.status_code == 200
+
 def setup_logging() -> logging.Logger:
-    level = logging.INFO
+    level = logging.DEBUG
 
     terminal = logging.StreamHandler()
     log_file = logging.FileHandler('output.log')
