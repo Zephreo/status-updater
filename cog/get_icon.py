@@ -10,19 +10,24 @@ class IconList:
 	app_list: list
 	steam_app_list: list
 
-	async def get_game_image(self, activity: discord.Activity | discord.Game) -> str | None:
-		if hasattr(activity, 'large_image_url'):
+	def get_game_image(self, activity: discord.Activity | discord.Game) -> str | None:
+		if hasattr(activity, 'large_image_url') and activity.large_image_url is not None:
 			return activity.large_image_url
+		if hasattr(activity, 'small_image_url') and activity.small_image_url is not None:
+				return activity.small_image_url
 		if hasattr(activity, 'application_id'):
-			app_id = activity.application_id
-			discord_app = list(filter(lambda app: app['id'] == str(app_id), self.app_list))
+			app_id = str(activity.application_id)
+			discord_app = list(filter(lambda app: app['id'] == app_id, self.app_list))
 			if discord_app:
-				self.log.debug("FOUND discord app by application_id = %s", discord_app)
-				return f"https://cdn.discordapp.com/app-icons/{discord_app[0]['id']}/{discord_app[0]['icon']}.png"
+				rpc = self.fetch_rpc(app_id)
+				self.log.debug("FOUND discord app by application_id = %s, rpc = %s", discord_app, rpc)
+				return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
 		discord_app_by_name = list(filter(lambda app: app['name'] == str(activity.name), self.app_list))
 		if discord_app_by_name:
-			self.log.debug("FOUND discord app by name = %s", discord_app_by_name)
-			return f"https://cdn.discordapp.com/app-icons/{discord_app_by_name[0]['id']}/{discord_app_by_name[0]['icon']}.png"
+			app_id = discord_app_by_name[0]['id']
+			rpc = self.fetch_rpc(app_id)
+			self.log.debug("FOUND discord app by name = %s, rpc = %s", discord_app_by_name, rpc)
+			return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
 		steam_app_by_name = list(filter(lambda steam_app: steam_app['name'] == str(activity.name), self.steam_app_list))
 		if steam_app_by_name:
 			steam_app_id = steam_app_by_name[0]["appid"]
@@ -52,3 +57,7 @@ class IconList:
 				steam_app_list_response = dict(steam_response.json())
 				self.steam_app_list = steam_app_list_response['applist']['apps']
 				self.log.debug("Loading Steam detectable applications finished")
+
+	@staticmethod
+	def fetch_rpc(id: str) -> dict:
+		return requests.get(f"https://discord.com/api/v10/applications/{id}/rpc").json()
