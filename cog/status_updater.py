@@ -188,7 +188,7 @@ class StatusUpdater(commands.Cog):
         action="Whether to add or remove an emoji",
         emoji="The emoji to add (ignored if removing)",
         display_name="Override the game name with a custom display name",
-        target_user="The user whose game you want to target (defaults to you if omitted)"
+        target_user="@Mention the user whose game you want to target (defaults to you if omitted)"
     )
 	async def emoji(
 		self,
@@ -242,9 +242,10 @@ class StatusUpdater(commands.Cog):
 
 	@app_commands.command(name='get_icon', description="Get the link to your current game's icon if it exists")
 	@app_commands.describe(
-        target_user="The user whose game you want to target (defaults to you if omitted)"
+        target_user="@Mention the user whose game you want to target (defaults to you if omitted)",
+		source="The service to pick the icon from (defaults to first available if omitted)"
     )
-	async def get_icon(self, interaction: discord.Interaction, target_user: discord.User | None) -> None:
+	async def get_icon(self, interaction: discord.Interaction, target_user: discord.User | None, source: Literal["discord", "steam"] | None) -> None:
 		self.log.info(f"User '{interaction.user.name}' ran /get_icon command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
 		if guild is None:
@@ -265,7 +266,7 @@ class StatusUpdater(commands.Cog):
 		if not isinstance(game, (discord.Activity, discord.Game)):
 			await interaction.response.send_message("Unable to get game url for this user.", ephemeral=True)
 			return
-		icon_url = self.icon_list.get_game_image(game)
+		icon_url = self.icon_list.get_game_image(game, source)
 		if icon_url is None:
 			await interaction.response.send_message("Unable to get game url for this game.", ephemeral=True)
 			return
