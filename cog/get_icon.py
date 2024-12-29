@@ -33,8 +33,10 @@ class IconList:
 		if self.is_steam_source(source) and steam_app_by_name:
 			steam_app_id = steam_app_by_name[0]["appid"]
 			self.log.debug("FOUND Steam app by name = %s", steam_app_by_name[0])
-			timestamp = calendar.timegm(time.gmtime())
-			game_image_logo = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{steam_app_id}/logo.jpg?t={timestamp}"
+			game_image_logo = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{steam_app_id}/logo.png"
+			if util.check_resource_exists(game_image_logo):
+				return game_image_logo
+			game_image_logo = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{steam_app_id}/logo.jpg"
 			if util.check_resource_exists(game_image_logo):
 				return game_image_logo
 		return None
