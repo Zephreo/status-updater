@@ -90,14 +90,15 @@ def calculate_game_info(members: list[discord.Member], emojis: dict[str, EmojiDa
 	if not games:
 		return []
 	game_info: dict[str, GameInfo] = {}
-	for game in set(games):
+	for game in games:
+		if game in game_info:
+			info = game_info[game]
+			info.count += 1
+			continue
 		info = GameInfo()
 		info.name = game
 		info.count = 1
 		info.emoji = None
-		if game in game_info:
-			info = game_info[game]
-			info.count += 1
 		config = None
 		if game in emojis:
 			config = emojis[game]

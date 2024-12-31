@@ -1,7 +1,5 @@
-import calendar
 from typing import Literal
 import util
-import time
 import discord
 import requests
 import logging
