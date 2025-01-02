@@ -29,15 +29,14 @@ class SteamPlayerSummaries:
 		# skip if empty
 		if all(not ids for ids in self.poll_ids.values()):
 			return
-		steam_ids = ",".join(self.poll_ids.values())
+		steam_ids = ",".join([steam_id for ids in self.poll_ids.values() for steam_id in ids])
 		self.log.debug("Polling Steam API for player summaries: %s", steam_ids) # TEMP
 		url = f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={os.getenv('STEAM_KEY')}&steamids={steam_ids}"
 		response = requests.get(url)
 		data = response.json()
 		players = data["response"]["players"]
-		cache = {}
 		for player in players:
-			cache[player["steamid"]] = PlayerSummary(player)
+			self.cache[player["steamid"]] = PlayerSummary(player)
 
 	def get_player_summary(self, steam_id: str | None) -> PlayerSummary | None:
 		if steam_id is None:

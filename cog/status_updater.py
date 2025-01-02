@@ -235,14 +235,14 @@ class StatusUpdater(commands.Cog):
 				emoji_obj["emoji"] = emoji
 			if display_name is not None:
 				emoji_obj['display_name'] = display_name
-			await interaction.response.send_message(f"Added emoji {emoji} for game {game}")
+			await interaction.response.send_message(f"Added emoji {emoji} for game {game}", ephemeral=True)
 			self.log.info(f"Added emoji {emoji} for game {game}")
 		elif action == "ignore":
 			if emoji_obj is None:
 				emoji_obj = EmojiData()
 				config["emojis"][game] = emoji_obj
 			config["emojis"][game]["ignore"] = not config["emojis"][game].get("ignore", False)
-			await interaction.response.send_message(f"{'Ignored' if config['emojis'][game]['ignore'] else 'Unignored'} game {game}")
+			await interaction.response.send_message(f"{'Ignored' if config['emojis'][game]['ignore'] else 'Unignored'} game {game}", ephemeral=True)
 			self.log.info(f"{'Ignored' if config['emojis'][game]['ignore'] else 'Unignored'} game {game}")
 		self.config.save()
 

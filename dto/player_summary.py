@@ -11,12 +11,12 @@ class PlayerSummary:
 	avatar_hash: str
 	last_log_off_timestamp: int
 	online_status: int
-	primary_clan_id: str
-	user_created_at: int
-	player_status_flags: int
-	game_name: str
-	game_id: str
-	location_country_code: str
+	primary_clan_id: str | None
+	user_created_at: int | None
+	player_status_flags: int | None
+	game_name: str | None
+	game_id: str | None
+	location_country_code: str | None
 
 	def __init__(self, data: dict):
 		self.steam_id = data["steamid"]
@@ -30,12 +30,12 @@ class PlayerSummary:
 		self.avatar_hash = data["avatarhash"]
 		self.last_log_off_timestamp = data["lastlogoff"]
 		self.online_status = data["personastate"]
-		self.primary_clan_id = data["primaryclanid"]
-		self.user_created_at = data["timecreated"]
-		self.player_status_flags = data["personastateflags"]
-		self.game_name = data["gameextrainfo"]
-		self.game_id = data["gameid"]
-		self.location_country_code = data["loccountrycode"]
+		self.primary_clan_id = data.get("primaryclanid")
+		self.user_created_at = data.get("timecreated")
+		self.player_status_flags = data.get("personastateflags")
+		self.game_name = data.get("gameextrainfo")
+		self.game_id = data.get("gameid")
+		self.location_country_code = data.get("loccountrycode")
 
 	def __str__(self):
 		return f"{self.username} ({self.steam_id}) - {self.game_name}"
