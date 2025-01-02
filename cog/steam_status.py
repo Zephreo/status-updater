@@ -30,7 +30,7 @@ class SteamPlayerSummaries:
 		if all(not ids for ids in self.poll_ids.values()):
 			return
 		steam_ids = ",".join([steam_id for ids in self.poll_ids.values() for steam_id in ids])
-		self.log.debug("Polling Steam API for player summaries: %s", steam_ids) # TEMP
+		# self.log.debug("Polling Steam API for player summaries: %s", steam_ids) # TEMP
 		url = f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={os.getenv('STEAM_KEY')}&steamids={steam_ids}"
 		response = requests.get(url)
 		data = response.json()

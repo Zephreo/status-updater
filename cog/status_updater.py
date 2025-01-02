@@ -328,7 +328,7 @@ class StatusUpdater(commands.Cog):
 		member_config = config["members"].get(str(member.id), {})
 		steam_id = member_config.get("steam_id", None)
 		steam_profile = self.steam_status.get_player_summary(steam_id)
-		return [discord.Game(steam_profile.game_name)] if steam_profile is not None else []
+		return [discord.Game(steam_profile.game_name)] if steam_profile is not None and steam_profile.game_name is not None else []
 
 	def get_tracked_games(self, member: discord.Member, config: GuildData) -> list[str]:
 		discord_games = [activity.name for activity in member.activities if (activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming) and activity.name]
@@ -337,7 +337,7 @@ class StatusUpdater(commands.Cog):
 		member_config = config["members"].get(str(member.id), {})
 		steam_id = member_config.get("steam_id", None)
 		steam_profile = self.steam_status.get_player_summary(steam_id)
-		return [steam_profile.game_name] if steam_profile is not None else []
+		return [steam_profile.game_name] if steam_profile is not None and steam_profile.game_name is not None else []
 
 	def all_tracked_games(self, members: list[discord.Member], config: GuildData) -> list[str]:
 		return [game for member in members for game in self.get_tracked_games(member, config)]

@@ -29,7 +29,7 @@ pip3 install discord.py python-dotenv requests
 
 8. Run the bot.
 ```bash
-python .\\main.py
+python .\main.py
 ```
 
 ## Files
@@ -37,4 +37,6 @@ python .\\main.py
 - `.env`
 ```
  DISCORD_TOKEN=<Discord Bot Token>
+ STEAM_KEY=<Steam Key>
+ X_SUPER_PROPERTIES=<Valid Discord super properties of bot>
 ```
