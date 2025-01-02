@@ -181,7 +181,7 @@ class StatusUpdater(commands.Cog):
 		games_count = calculate_game_info(members, guild_config["emojis"])
 		tracked = [(info.name, info.count) for info in games_count]
 		message = f"All activities: {activities}\nTracked games: {tracked}\nConfig: {config}"
-		self.log.info(message)
+		self.log.debug(message)
 		await interaction.response.send_message(message, ephemeral=True)
 
 	@app_commands.command(name='emoji', description="Add or Remove an emoji to your current game")
@@ -276,7 +276,7 @@ class StatusUpdater(commands.Cog):
 	@app_commands.command(name='reload', description="Restart the bot cause it broke")
 	async def reload(self, interaction: discord.Interaction) -> None:
 		self.log.warning(f"User '{interaction.user.name}' ran /reload command for channel '{getattr(interaction.channel, 'name', None)}'")
-		await interaction.response.send_message("Reloading...")
+		await interaction.response.send_message("Reloading...", ephemeral=True)
 		os.execv(sys.executable, ['python'] + sys.argv)
 
 	async def background_task(self):
