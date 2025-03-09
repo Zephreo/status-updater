@@ -59,7 +59,7 @@ def setup_logging() -> logging.Logger:
     level = logging.DEBUG
 
     terminal = logging.StreamHandler()
-    log_file = logging.FileHandler('output.log')
+    log_file = logging.FileHandler('output.log', encoding='utf-8')
 
     setup_handler(terminal)
     setup_handler(log_file)

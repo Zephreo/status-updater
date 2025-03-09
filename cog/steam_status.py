@@ -22,12 +22,14 @@ class SteamPlayerSummaries:
 		while not self._bot.is_closed():
 			self.poll()
 			await asyncio.sleep(40)
+		self.log.warning("SteamPlayerSummaries background task stopped")
 
 	# poll steam api for player summaries
 	# https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/
 	def poll(self):
 		# skip if empty
 		if all(not ids for ids in self.poll_ids.values()):
+			self.cache.clear()
 			return
 		steam_ids = ",".join([steam_id for ids in self.poll_ids.values() for steam_id in ids])
 		# self.log.debug("Polling Steam API for player summaries: %s", steam_ids) # TEMP
@@ -35,6 +37,7 @@ class SteamPlayerSummaries:
 		response = requests.get(url)
 		data = response.json()
 		players = data["response"]["players"]
+		self.cache.clear()
 		for player in players:
 			self.cache[player["steamid"]] = PlayerSummary(player)
 
