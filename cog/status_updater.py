@@ -360,6 +360,8 @@ class StatusUpdater(commands.Cog):
 			if game in config["emojis"]:
 				emoji_config = config["emojis"][game]
 			if emoji_config is not None:
+				if "ignore" in emoji_config and emoji_config["ignore"]:
+					continue
 				if "display_name" in emoji_config and emoji_config["display_name"] is not None:
 					info.name = emoji_config["display_name"]
 				info.emoji = emoji_config["emoji"]
