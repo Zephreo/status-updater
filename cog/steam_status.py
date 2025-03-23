@@ -35,7 +35,11 @@ class SteamPlayerSummaries:
 		# self.log.debug("Polling Steam API for player summaries: %s", steam_ids) # TEMP
 		url = f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={os.getenv('STEAM_KEY')}&steamids={steam_ids}"
 		response = requests.get(url)
-		data = response.json()
+		try:
+			data = response.json()
+		except ValueError as e:
+			self.log.error("Failed to decode player summaries from Steam API, response: %s", response, exc_info=e)
+			return
 		players = data["response"]["players"]
 		self.cache.clear()
 		for player in players:

@@ -21,13 +21,14 @@ class IconList:
 				rpc = self.fetch_rpc(app_id)
 				self.log.debug("FOUND discord app by application_id = %s, rpc = %s", discord_app, rpc)
 				return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
-		discord_app_by_name = list(filter(lambda app: app['name'] == str(activity.name), self.app_list))
+		activity_name = str(activity.name)
+		discord_app_by_name = self.find_discord_app_by_name(activity_name)
 		if self.is_discord_source(source) and discord_app_by_name:
-			app_id = discord_app_by_name[0]['id']
+			app_id = discord_app_by_name['id']
 			rpc = self.fetch_rpc(app_id)
 			self.log.debug("FOUND discord app by name = %s, rpc = %s", discord_app_by_name, rpc)
 			return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
-		steam_app_by_name = list(filter(lambda steam_app: steam_app['name'] == str(activity.name), self.steam_app_list))
+		steam_app_by_name = list(filter(lambda steam_app: steam_app['name'] == activity_name, self.steam_app_list))
 		if self.is_steam_source(source) and steam_app_by_name:
 			steam_app_id = steam_app_by_name[0]["appid"]
 			self.log.debug("FOUND Steam app by name = %s", steam_app_by_name[0])
@@ -38,6 +39,21 @@ class IconList:
 			if util.check_resource_exists(game_image_logo):
 				return game_image_logo
 		return None
+
+	def find_discord_app_by_name(self, target_name: str) -> dict | None:
+		"""Return the first Discord app from app_list that matches target_name using discord_name_matcher."""
+		for app in self.app_list:
+			if self.discord_name_matcher(app, target_name):
+				return app
+		return None
+
+	@staticmethod
+	def discord_name_matcher(app, target_name: str) -> bool:
+		if app['name'] == target_name:
+			return True
+		if 'aliases' in app and isinstance(app['aliases'], list):
+			return any(alias == target_name for alias in app['aliases'])
+		return False
 
 	@staticmethod
 	def is_discord_source(source: Literal["discord", "steam"] | None):
