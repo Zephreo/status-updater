@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from discord import VoiceChannel
 from discord import app_commands
 import discord
@@ -15,6 +16,8 @@ import sys
 from cog.get_icon import IconList
 
 CONFIG_FILE = "config.json"
+UPDATE_INTERVAL = 10
+SLEEP_THRESHOLD = 15
 
 class ChannelData(TypedDict):
 	active: bool
@@ -385,10 +388,17 @@ class StatusUpdater(commands.Cog):
 
 	async def background_task(self):
 		await self._bot.wait_until_ready()
+		last_timestamp = time.time()
 		while not self._bot.is_closed():
 			for guild in self._bot.guilds:
 				await self.update_vc_status(guild)
-			await asyncio.sleep(10)
+			await asyncio.sleep(UPDATE_INTERVAL)
+
+			current_timestamp = time.time()
+			if (current_timestamp - last_timestamp) > UPDATE_INTERVAL + SLEEP_THRESHOLD:
+				self.log.warning("System likely went to sleep and then resumed!, Reloading...")
+				os.execv(sys.executable, ['python'] + sys.argv)
+			last_timestamp = current_timestamp
 
 	async def update_vc_status(self, guild: discord.Guild, id: int | None = None, force = False):
 		"""Updates the voice chat status based on the game members are playing."""
