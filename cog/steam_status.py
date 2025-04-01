@@ -38,7 +38,7 @@ class SteamPlayerSummaries:
 		try:
 			data = response.json()
 		except ValueError as e:
-			self.log.error("Failed to decode player summaries from Steam API, response: %s", response, exc_info=e)
+			self.log.error("Failed to decode player summaries from Steam API, response: %s", response.text, exc_info=e)
 			return
 		players = data["response"]["players"]
 		self.cache.clear()
