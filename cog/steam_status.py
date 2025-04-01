@@ -1,4 +1,4 @@
-import requests
+import aiohttp
 from dto.player_summary import PlayerSummary
 import os
 import logging
@@ -20,13 +20,13 @@ class SteamPlayerSummaries:
 	async def background_task(self):
 		await self._bot.wait_until_ready()
 		while not self._bot.is_closed():
-			self.poll()
+			await self.poll()
 			await asyncio.sleep(40)
 		self.log.warning("SteamPlayerSummaries background task stopped")
 
 	# poll steam api for player summaries
 	# https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/
-	def poll(self):
+	async def poll(self):
 		# skip if empty
 		if all(not ids for ids in self.poll_ids.values()):
 			self.cache.clear()
@@ -34,16 +34,17 @@ class SteamPlayerSummaries:
 		steam_ids = ",".join([steam_id for ids in self.poll_ids.values() for steam_id in ids])
 		# self.log.debug("Polling Steam API for player summaries: %s", steam_ids) # TEMP
 		url = f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={os.getenv('STEAM_KEY')}&steamids={steam_ids}"
-		response = requests.get(url)
-		try:
-			data = response.json()
-		except ValueError as e:
-			self.log.error("Failed to decode player summaries from Steam API, response: %s", response.text, exc_info=e)
-			return
-		players = data["response"]["players"]
-		self.cache.clear()
-		for player in players:
-			self.cache[player["steamid"]] = PlayerSummary(player)
+		async with aiohttp.ClientSession() as session:
+			async with session.get(url) as response:
+				try:
+					data = await response.json()
+				except ValueError as e:
+					self.log.error("Failed to decode player summaries from Steam API, response: %s", await response.text(), exc_info=e)
+					return
+				players = data["response"]["players"]
+				self.cache.clear()
+				for player in players:
+					self.cache[player["steamid"]] = PlayerSummary(player)
 
 	def get_player_summary(self, steam_id: str | None) -> PlayerSummary | None:
 		if steam_id is None:

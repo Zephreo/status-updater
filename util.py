@@ -2,7 +2,7 @@
 
 import os
 import discord
-import requests
+import aiohttp
 import logging
 
 async def get_nth_msg(
@@ -24,7 +24,7 @@ async def get_nth_msg(
     ][n - 1]
 
 VOICE_STATUS_URL = "https://discord.com/api/v10/channels/:channelId/voice-status"
-async def set_status(channel: discord.VoiceChannel, message: str) -> tuple[bool, requests.Response]:
+async def set_status(channel: discord.VoiceChannel, message: str) -> tuple[bool, aiohttp.ClientResponse]:
     """Sets the status of a voice channel.
 
     Args:
@@ -44,16 +44,14 @@ async def set_status(channel: discord.VoiceChannel, message: str) -> tuple[bool,
         "status": message
     }
 
-    response = requests.put(url, headers=headers, json=data)
+    async with aiohttp.ClientSession() as session:
+        async with session.put(url, headers=headers, json=data) as response:
+            return response.status == 204, response
 
-    return response.status_code == 204, response
-
-def check_resource_exists(url: str):
-    with requests.Session() as session:
-        # _LOGGER.debug("Checking if web resource [%s] exists", url)
-        with session.head(url) as response:
-            # _LOGGER.debug("Resource [%s] response status = %s", url, response.status)
-            return response.status_code == 200
+async def check_resource_exists(url: str) -> bool:
+    async with aiohttp.ClientSession() as session:
+        async with session.head(url) as response:
+            return response.status == 200
 
 def setup_logging() -> logging.Logger:
     level = logging.DEBUG

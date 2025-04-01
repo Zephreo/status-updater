@@ -121,7 +121,7 @@ class StatusUpdater(commands.Cog):
 		self.steam_status = SteamPlayerSummaries(self.log, bot)
 		self._bot.loop.create_task(self.background_task())
 		self._bot.loop.create_task(self.steam_status.background_task())
-		self.icon_list = IconList(self.log) # load last
+		self.icon_list = None  # Will be initialized in setup
 
 	@app_commands.command(name='toggle', description="Toggle Voice Status updates for this channel")
 	async def toggle(
@@ -309,7 +309,10 @@ class StatusUpdater(commands.Cog):
 			await interaction.response.send_message("User is not playing any games.", ephemeral=True)
 			return
 		game = tracked_games[0]
-		icon_url = self.icon_list.get_game_image(game, source)
+		if self.icon_list is None:
+			await interaction.response.send_message("Icon list not initialized yet. Please try again in a moment.", ephemeral=True)
+			return
+		icon_url = await self.icon_list.get_game_image(game, source)
 		if icon_url is None:
 			await interaction.response.send_message("Unable to get game url for this game.", ephemeral=True)
 			return
@@ -466,13 +469,17 @@ class StatusUpdater(commands.Cog):
 				self.log.info(f"Setting status of '{voice_channel.name}' to '{message}'")
 				success, response = await util.set_status(voice_channel, message)
 				if not success:
-					self.log.error(f"Failed to update voice channel status for '{voice_channel.name}' with status code '{response.status_code}'\n {response}")
+					self.log.error(f"Failed to update voice channel status for '{voice_channel.name}' with status code '{response.status}'\n {response}")
 			else:
 				self.log.info(f"Setting cached status of '{voice_channel.name}' to '{message}'")
 
 		if config_changed:
 			self.config.prune(guild.id, guild.voice_channels)
 			self.config.save()
+
+	async def setup(self):
+		"""Async setup method to initialize async components."""
+		self.icon_list = await IconList.create(self.log)
 
 # https://discord.com/oauth2/authorize?client_id=1151102788420501507&permissions=281477124194320&scope=bot
 
@@ -482,6 +489,7 @@ async def setup(bot: commands.Bot) -> None:
     Args:
         bot: The bot to add this cog to.
     """
-
-    await bot.add_cog(StatusUpdater(bot))
+    cog = StatusUpdater(bot)
+    await cog.setup()  # Initialize async components
+    await bot.add_cog(cog)
 
