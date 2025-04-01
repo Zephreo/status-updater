@@ -3,7 +3,7 @@
 import os
 import asyncio
 from dotenv import load_dotenv
-
+import util
 import discord
 from discord.ext import commands
 
@@ -21,6 +21,8 @@ load_dotenv()
 
 # Get the Discord token from the environment.
 discord_token = os.getenv('DISCORD_TOKEN')
+
+asyncio.run(util.wait_for_connection())
 
 # Configure the bot. The 'command_prefix' parameter is required
 # but it's not being used so we set it to something random.

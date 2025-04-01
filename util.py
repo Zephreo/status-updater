@@ -4,6 +4,33 @@ import os
 import discord
 import aiohttp
 import logging
+import asyncio
+
+async def wait_for_connection(url: str = "https://www.google.com", max_retries: int = 15, retry_delay: float = 3.0) -> bool:
+    """Wait for a connection to be available.
+
+    Args:
+        url: The URL to check for connection
+        max_retries: Maximum number of retries before giving up
+        retry_delay: Delay between retries in seconds
+
+    Returns:
+        bool: True if connection is successful, False otherwise
+    """
+    for attempt in range(max_retries):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        return True
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logging.debug(f"Connection attempt {attempt + 1} failed: {e}")
+                await asyncio.sleep(retry_delay)
+            else:
+                logging.error(f"Failed to connect after {max_retries} attempts: {e}")
+                return False
+    return False
 
 async def get_nth_msg(
     channel: discord.TextChannel | discord.Thread,
