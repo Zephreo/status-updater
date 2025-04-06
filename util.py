@@ -91,6 +91,11 @@ def setup_logging() -> logging.Logger:
 
     logger = logging.getLogger('voice-channel-status')
 
+    # Remove all old handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+        handler.close()
+
     logger.setLevel(level)
     logger.addHandler(terminal)
     logger.addHandler(log_file)

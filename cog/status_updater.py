@@ -400,6 +400,7 @@ class StatusUpdater(commands.Cog):
 			current_timestamp = time.time()
 			if (current_timestamp - last_timestamp) > UPDATE_INTERVAL + SLEEP_THRESHOLD:
 				self.log.warning("System likely went to sleep and then resumed!, Reloading...")
+				await self._bot.close()
 				os.execv(sys.executable, ['python'] + sys.argv)
 			last_timestamp = current_timestamp
 
