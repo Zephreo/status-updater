@@ -1,5 +1,6 @@
 import asyncio
 import json
+import subprocess
 import time
 from discord import VoiceChannel
 from discord import app_commands
@@ -400,8 +401,8 @@ class StatusUpdater(commands.Cog):
 			current_timestamp = time.time()
 			if (current_timestamp - last_timestamp) > UPDATE_INTERVAL + SLEEP_THRESHOLD:
 				self.log.warning("System likely went to sleep and then resumed!, Reloading...")
-				await self._bot.close()
-				os.execv(sys.executable, ['python'] + sys.argv)
+				subprocess.Popen([sys.executable] + sys.argv)
+				os._exit(0)
 			last_timestamp = current_timestamp
 
 	async def update_vc_status(self, guild: discord.Guild, id: int | None = None, force = False):
