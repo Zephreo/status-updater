@@ -38,7 +38,11 @@ class SteamPlayerSummaries:
 			async with session.get(url) as response:
 				try:
 					data = await response.json()
-				except ValueError as e:
+				except Exception as e:
+					if response.status == 429:
+						self.log.warning("Steam API rate limit reached, skipping poll")
+						await asyncio.sleep(60)
+						return
 					self.log.error("Failed to decode player summaries from Steam API, response: %s", await response.text(), exc_info=e)
 					return
 				players = data["response"]["players"]
