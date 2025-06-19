@@ -174,7 +174,7 @@ class StatusUpdater(commands.Cog):
 		guild_config = self.config.get_guild(guild.id)
 		config = self.config.get_channel(guild.id, interaction.channel_id)
 		members = channel.members
-		activities = [(member.name, activity.name) for member in members for activity in member.activities]
+		activities = [(member.name, activity_name) for member in members for activity_name in self.get_tracked_games(member, guild_config, True)]
 		games_count = self.calculate_game_info(members, guild_config)
 		tracked = [(info.name, info.count) for info in games_count]
 		message = f"All activities: {activities}\nTracked games: {tracked}\nConfig: {config}"
@@ -337,14 +337,15 @@ class StatusUpdater(commands.Cog):
 		steam_profile = self.steam_status.get_player_summary(steam_id)
 		return [discord.Game(steam_profile.game_name)] if steam_profile is not None and steam_profile.game_name is not None else []
 
-	def get_tracked_games(self, member: discord.Member, config: GuildData) -> list[str]:
-		discord_games = [activity.name for activity in member.activities if (activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming) and activity.name]
-		if discord_games:
+	def get_tracked_games(self, member: discord.Member, config: GuildData, include_activities: bool = False) -> list[str]:
+		discord_games = [activity.name for activity in member.activities if (include_activities or activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming) and activity.name]
+		if discord_games and not include_activities:
 			return discord_games
 		member_config = config["members"].get(str(member.id), {})
 		steam_id = member_config.get("steam_id", None)
 		steam_profile = self.steam_status.get_player_summary(steam_id)
-		return [steam_profile.game_name] if steam_profile is not None and steam_profile.game_name is not None else []
+		steam_games = [steam_profile.game_name] if steam_profile is not None and steam_profile.game_name is not None else []
+		return discord_games + steam_games if discord_games else steam_games
 
 	def all_tracked_games(self, members: list[discord.Member], config: GuildData) -> list[str]:
 		return [game for member in members for game in self.get_tracked_games(member, config)]
