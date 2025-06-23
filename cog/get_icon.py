@@ -9,7 +9,7 @@ class IconList:
 	app_list: list
 	steam_app_list: list
 
-	async def get_game_image(self, activity: discord.Activity | discord.Game, source: Literal["discord", "steam"] | None) -> str | None:
+	async def get_game_image(self, activity: discord.Activity | discord.Game | str, source: Literal["discord", "steam"] | None) -> str | None:
 		if self.is_discord_source(source) and hasattr(activity, 'large_image_url') and activity.large_image_url is not None:
 			return activity.large_image_url
 		if self.is_discord_source(source) and hasattr(activity, 'small_image_url') and activity.small_image_url is not None:
@@ -21,7 +21,7 @@ class IconList:
 				rpc = await self.fetch_rpc(app_id)
 				self.log.debug("FOUND discord app by application_id = %s, rpc = %s", discord_app, rpc)
 				return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
-		activity_name = str(activity.name)
+		activity_name = activity if isinstance(activity, str) else str(activity.name)
 		discord_app_by_name = self.find_discord_app_by_name(activity_name)
 		if self.is_discord_source(source) and discord_app_by_name:
 			app_id = discord_app_by_name['id']
@@ -39,6 +39,18 @@ class IconList:
 			if await util.check_resource_exists(game_image_logo):
 				return game_image_logo
 		return None
+
+	async def fetch_game_image(self, activity: discord.Activity | discord.Game | str, source: Literal["discord", "steam"] | None) -> bytes | None:
+		"""Fetch the game image for a given activity as a file, checking Discord and Steam sources."""
+		url = await self.get_game_image(activity, source)
+		if not url:
+			return None
+		async with aiohttp.ClientSession() as session:
+			async with session.get(url) as response:
+				if response.status != 200:
+					raise ValueError("Failed to fetch image")
+				image_data = await response.read()
+		return image_data
 
 	def find_discord_app_by_name(self, target_name: str) -> dict | None:
 		"""Return the first Discord app from app_list that matches target_name using discord_name_matcher."""

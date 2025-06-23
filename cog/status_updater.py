@@ -10,33 +10,46 @@ from cog.steam_status import SteamPlayerSummaries
 import util
 import logging
 from typing_extensions import NotRequired
-from typing import TypedDict, Dict, Literal, Generator
+from typing import TypedDict, Dict, Literal
 import os
 import sys
+import re
+from datetime import datetime
 
 from cog.get_icon import IconList
 
 CONFIG_FILE = "config.json"
 UPDATE_INTERVAL = 10
 SLEEP_THRESHOLD = 15
+DEFAULT_EMOJI_CREATE_LIMIT = 10
 
 class ChannelData(TypedDict):
 	active: bool
 	name: str | None
 	current_message: str | None
 
-class EmojiData(TypedDict):
+class GameData(TypedDict):
 	emoji: NotRequired[str]
 	display_name: NotRequired[str]
 	ignore: NotRequired[bool]
+
+class EmojiData(TypedDict):
+	id: int # snowflake
+	name: str
+	emoji: str # The emoji string, e.g. "<:emoji_name:123456789012345678>"
+	created_at: str # ISO 8601 format
+	times_used: int # How many times the emoji has been used
+	last_used: NotRequired[str] # ISO 8601 format, when the emoji was last used
 
 class MemberData(TypedDict):
 	steam_id: NotRequired[str]
 
 class GuildData(TypedDict):
 	channels: Dict[str, ChannelData]
-	emojis: Dict[str, EmojiData]
+	games: Dict[str, GameData]
 	members: Dict[str, MemberData]
+	emojis: Dict[str, EmojiData]
+	emoji_create_limit: int # Limit for how many emojis can be created by the bot in this guild
 
 class ConfigFile(TypedDict):
 	guilds: Dict[str, GuildData]
@@ -45,6 +58,7 @@ class GameInfo:
 	emoji: str | None
 	count: int
 	name: str
+	activity: discord.Activity | discord.Game | str
 
 class Config():
 	"""Allows configuration of the bot via commands. Stored to disk."""
@@ -59,7 +73,7 @@ class Config():
 		try:
 			with open(CONFIG_FILE, "r") as f:
 				self._data = json.load(f)
-		except (json.decoder.JSONDecodeError, FileNotFoundError):
+		except (FileNotFoundError):
 			self._data = ConfigFile(guilds={})
 			self.save()
 
@@ -71,7 +85,7 @@ class Config():
 	def get_guild(self, guild: int) -> GuildData:
 		"""Gets a config value."""
 		if str(guild) not in self._data["guilds"]:
-			self._data["guilds"][str(guild)] = GuildData(channels={}, emojis={}, members={})
+			self._data["guilds"][str(guild)] = GuildData(channels={}, games={}, members={}, emojis={}, emoji_create_limit=DEFAULT_EMOJI_CREATE_LIMIT)
 		return self._data["guilds"][str(guild)]
 
 	def get_channel(self, guild: int, channel: int) -> ChannelData:
@@ -80,13 +94,19 @@ class Config():
 		if str(channel) not in guild_data["channels"]:
 			guild_data["channels"][str(channel)] = ChannelData(active=True, current_message="", name=None)
 		return guild_data["channels"][str(channel)]
-	
+
 	def get_member(self, guild: int, member: int) -> MemberData:
 		"""Gets a config value."""
 		guild_data = self.get_guild(guild)
 		if str(member) not in guild_data["members"]:
 			guild_data["members"][str(member)] = MemberData()
 		return guild_data["members"][str(member)]
+
+	def set_emoji(self, guild_data: GuildData, emoji: discord.Emoji) -> EmojiData:
+		"""Gets a config value for an emoji."""
+		if emoji.name not in guild_data["emojis"]:
+			guild_data["emojis"][emoji.name] = EmojiData(id=emoji.id, name=emoji.name, emoji=str(emoji), created_at=datetime.now().isoformat(), times_used=0)
+		return guild_data["emojis"][emoji.name]
 
 	def prune(self, guild: int, voice_channels: list[VoiceChannel]):
 		"""Removes any unused config entries."""
@@ -174,7 +194,7 @@ class StatusUpdater(commands.Cog):
 		guild_config = self.config.get_guild(guild.id)
 		config = self.config.get_channel(guild.id, interaction.channel_id)
 		members = channel.members
-		activities = [(member.name, activity_name) for member in members for activity_name in self.get_tracked_games(member, guild_config, True)]
+		activities = [(member.name, activity if isinstance(activity, str) else str(activity.name)) for member in members for activity in self.get_tracked_games(member, guild_config)]
 		games_count = self.calculate_game_info(members, guild_config)
 		tracked = [(info.name, info.count) for info in games_count]
 		message = f"All activities: {activities}\nTracked games: {tracked}\nConfig: {config}"
@@ -219,35 +239,40 @@ class StatusUpdater(commands.Cog):
 		if len(tracked_games) > 1:
 			await interaction.response.send_message("You are playing multiple games. Aborting..", ephemeral=True)
 			return
-		emoji_obj: EmojiData | None = config["emojis"].get(game, None)
+		game_name = game if isinstance(game, str) else str(game.name)
+		game_config: GameData | None = config["games"].get(game_name, None)
 		if action == "remove":
-			if emoji_obj is None or "emoji" not in emoji_obj:
-				await interaction.response.send_message(f"You have not added an emoji for this game. {game}", ephemeral=True)
+			if game_config is None or "emoji" not in game_config:
+				await interaction.response.send_message(f"You have not added an emoji for this game. {game_name}", ephemeral=True)
 				return
-			emoji = emoji_obj.pop("emoji", None)
-			await interaction.response.send_message(f"Removed emoji {emoji} for game {game}")
-			self.log.info(f"Removed emoji {emoji} for game {game}")
+			emoji = game_config.pop("emoji", None)
+			await interaction.response.send_message(f"Removed emoji {emoji} for game {game_name}")
+			self.log.info(f"Removed emoji {emoji} for game {game_name}")
 		elif action == "add":
 			emoji = emoji.strip() if emoji is not None and emoji.strip() != "" and " " not in emoji else None
 			if emoji is None and display_name is None:
-				await interaction.response.send_message(f"Invalid input ({emoji}, {display_name})", ephemeral=True)
-				return
-			if emoji_obj is None:
-				emoji_obj = EmojiData()
-				config["emojis"][game] = emoji_obj
+				emoji = await self.upload_emoji(guild, game)
+				if emoji is None:
+					await interaction.response.send_message(f"Invalid input ({emoji}, {display_name})", ephemeral=True)
+					return
+			if game_config is None:
+				game_config = GameData()
+				config["games"][game_name] = game_config
 			if emoji is not None:
-				emoji_obj["emoji"] = emoji
+				game_config["emoji"] = emoji
+			if game_config.get("emoji") is not None:
+				config["emojis"].pop(game_name, None)  # Remove emoji from auto emoji list
 			if display_name is not None:
-				emoji_obj['display_name'] = display_name
-			await interaction.response.send_message(f"Added emoji {emoji} for game {game}", ephemeral=True)
-			self.log.info(f"Added emoji {emoji} for game {game}")
+				game_config['display_name'] = display_name
+			await interaction.response.send_message(f"Added emoji {emoji} for game {game_name}", ephemeral=True)
+			self.log.info(f"Added emoji {emoji} for game {game_name}")
 		elif action == "ignore":
-			if emoji_obj is None:
-				emoji_obj = EmojiData()
-				config["emojis"][game] = emoji_obj
-			config["emojis"][game]["ignore"] = not config["emojis"][game].get("ignore", False)
-			await interaction.response.send_message(f"{'Ignored' if config['emojis'][game]['ignore'] else 'Unignored'} game {game}", ephemeral=True)
-			self.log.info(f"{'Ignored' if config['emojis'][game]['ignore'] else 'Unignored'} game {game}")
+			if game_config is None:
+				game_config = GameData()
+				config["games"][game_name] = game_config
+			config["games"][game_name]["ignore"] = not config["games"][game_name].get("ignore", False)
+			await interaction.response.send_message(f"{'Ignored' if config['games'][game_name]['ignore'] else 'Unignored'} game {game_name}", ephemeral=True)
+			self.log.info(f"{'Ignored' if config['games'][game_name]['ignore'] else 'Unignored'} game {game_name}")
 		self.config.save()
 
 	@app_commands.command(name='config', description="Edit config for this guild")
@@ -270,9 +295,8 @@ class StatusUpdater(commands.Cog):
 		if guild is None:
 			await interaction.response.send_message("Must be run in the server where the config is to be added", ephemeral=True)
 			return
-		if target_user is None:
-			member = interaction.user
-		else:
+		member = interaction.user
+		if target_user is not None:
 			member = target_user
 		if member is None:
 			await interaction.response.send_message("Failed to get user data", ephemeral=True)
@@ -325,6 +349,54 @@ class StatusUpdater(commands.Cog):
 		await interaction.response.send_message("Reloading...", ephemeral=True)
 		os.execv(sys.executable, ['python'] + sys.argv)
 
+	async def upload_emoji(self, guild: discord.Guild, activity: discord.Activity | discord.Game | str) -> str | None:
+		"""Uploads an emoji for the given activity and returns the emoji name."""
+		if self.icon_list is None:
+			self.log.warning("Icon list not initialized yet. Unable to upload emoji.")
+			return None
+		guild_config = self.config.get_guild(guild.id)
+		activity_name = activity if isinstance(activity, str) else str(activity.name)
+		game_config = guild_config["games"].get(activity_name, None)
+		emoji_name = re.sub(r'[^a-zA-Z0-9]', '', activity_name.lower()) # Remove non-alphanumeric characters
+
+		if game_config is not None:
+			self.log.warning(f"Game config for {activity_name} already exists")
+			return game_config.get("emoji", None)
+		if emoji_name in guild_config["emojis"]:
+			self.log.warning(f"Emoji {emoji_name} already exists in guild config for {activity_name}")
+			return guild_config["emojis"][emoji_name]["emoji"]
+
+		image_data = await self.icon_list.fetch_game_image(activity, None)
+		if image_data is None:
+			self.log.warning(f"Failed to fetch image for activity {activity_name}. Cannot upload emoji.")
+			return None
+
+		# check if server has reached emoji create limit
+		if len(guild_config["emojis"]) >= guild_config["emoji_create_limit"]:
+			# LRU remove the least recently used emoji
+			emoji_to_remove = min(guild_config["emojis"].values(), key=lambda e: datetime.fromisoformat(e.get("last_used", e["created_at"])))
+			self.log.info(f"Guild {guild.name} has reached emoji create limit of {guild_config['emoji_create_limit']}. Removing least recently used emoji <{emoji_to_remove.name}:{emoji_to_remove}> to make space.")
+			await guild.delete_emoji(discord.Emoji(id=emoji_to_remove["id"], name=emoji_to_remove["name"], guild=guild), 
+				f"Removing bot managed emoji to make space for {activity_name}, last used at {emoji_to_remove.get('last_used', None)}, created at {emoji_to_remove['created_at']}, times used {emoji_to_remove['times_used']}")
+			guild_config["emojis"].pop(emoji_to_remove["name"], None)
+			# Remove all the games that contain this emoji from the game config
+			for game_name, game_config in guild_config["games"].items():
+				if game_config.get("emoji") == emoji_to_remove["emoji"]:
+					self.log.info(f"Removing game {game_name} from config because it used the removed emoji {emoji_to_remove['emoji']}, config: {game_config}")
+					guild_config["games"].pop(game_name, None)
+
+		emoji_obj = await guild.create_custom_emoji(name=emoji_name, image=image_data)
+		self.log.info(f"Uploaded emoji {str(emoji_obj)} for game {activity_name}")
+
+		self.config.set_emoji(guild_config, emoji_obj) # Ensure the emoji is in the config
+		# add emoji to game config
+		game_config = GameData()
+		game_config["emoji"] = str(emoji_obj)
+		guild_config["games"][activity_name] = game_config
+
+		self.config.save()
+		return str(emoji_obj)
+
 	def get_game_info(self, member: discord.Member, config: GuildData) -> list[discord.Activity | discord.Game]:
 		games: list[discord.Activity | discord.Game] = []
 		for activity in member.activities:
@@ -337,17 +409,17 @@ class StatusUpdater(commands.Cog):
 		steam_profile = self.steam_status.get_player_summary(steam_id)
 		return [discord.Game(steam_profile.game_name)] if steam_profile is not None and steam_profile.game_name is not None else []
 
-	def get_tracked_games(self, member: discord.Member, config: GuildData, include_activities: bool = False) -> list[str]:
-		discord_games = [activity.name for activity in member.activities if (include_activities or activity.type == discord.ActivityType.playing or activity.type == discord.ActivityType.streaming) and activity.name]
-		if discord_games and not include_activities:
+	def get_tracked_games(self, member: discord.Member, config: GuildData) -> list[discord.Activity | discord.Game | str]:
+		discord_games: list[discord.Activity | discord.Game | str] = [activity for activity in member.activities if isinstance(activity, discord.Activity | discord.Game) and activity.name]
+		if discord_games:
 			return discord_games
 		member_config = config["members"].get(str(member.id), {})
 		steam_id = member_config.get("steam_id", None)
 		steam_profile = self.steam_status.get_player_summary(steam_id)
-		steam_games = [steam_profile.game_name] if steam_profile is not None and steam_profile.game_name is not None else []
-		return discord_games + steam_games if discord_games else steam_games
+		steam_games: list[discord.Activity | discord.Game | str] = [steam_profile.game_name] if steam_profile is not None and steam_profile.game_name is not None else []
+		return steam_games
 
-	def all_tracked_games(self, members: list[discord.Member], config: GuildData) -> list[str]:
+	def all_tracked_games(self, members: list[discord.Member], config: GuildData) -> list[discord.Activity | discord.Game | str]:
 		return [game for member in members for game in self.get_tracked_games(member, config)]
 
 	def calculate_game_info(self, members: list[discord.Member], config: GuildData) -> list[GameInfo]:
@@ -356,32 +428,36 @@ class StatusUpdater(commands.Cog):
 			return []
 		game_info: dict[str, GameInfo] = {}
 		for game in games:
-			if game in game_info:
-				info = game_info[game]
+			game_name = game if isinstance(game, str) else str(game.name)
+			if game_name in game_info:
+				info = game_info[game_name]
 				info.count += 1
 				continue
 			info = GameInfo()
-			info.name = game
+			info.name = game_name
 			info.count = 1
 			info.emoji = None
-			emoji_config = None
-			if game in config["emojis"]:
-				emoji_config = config["emojis"][game]
-			if emoji_config is not None:
-				if "ignore" in emoji_config and emoji_config["ignore"]:
+			info.activity = game
+			game_config = None
+			if game_name in config["games"]:
+				game_config = config["games"][game_name]
+			if game_config is not None:
+				if "ignore" in game_config and game_config["ignore"]:
 					continue
-				if "display_name" in emoji_config and emoji_config["display_name"] is not None:
-					info.name = emoji_config["display_name"]
-				info.emoji = emoji_config["emoji"]
-				temp = find_alias(game_info, emoji_config["emoji"])
+				if "display_name" in game_config and game_config["display_name"] is not None:
+					info.name = game_config["display_name"]
+				info.emoji = game_config["emoji"]
+				temp = find_alias(game_info, game_config["emoji"])
 				if temp is not None:
-					game, alias = temp
-					if "display_name" in emoji_config and emoji_config["display_name"] is not None:
-						alias.name = emoji_config["display_name"]
+					game_name, alias = temp
+					if "display_name" in game_config and game_config["display_name"] is not None:
+						alias.name = game_config["display_name"]
 					info = alias
 					info.count += 1
-			game_info[game] = info
-		games_count = [info for game, info in game_info.items()]
+					if isinstance(info.activity, str):
+						info.activity = game
+			game_info[game_name] = info
+		games_count = list(game_info.values())
 		games_count.sort(key=lambda x: x.count, reverse=True)
 		return games_count
 
@@ -418,6 +494,7 @@ class StatusUpdater(commands.Cog):
 		else:
 			voice_channels = guild.voice_channels
 
+		needed_emojis: dict[str, discord.Activity | discord.Game | str] = {}
 		for voice_channel in voice_channels:
 			# get config for this voice channel
 			guild_config = self.config.get_guild(guild.id)
@@ -443,6 +520,17 @@ class StatusUpdater(commands.Cog):
 			message = ""
 			if games_count:
 				emoji_games = [info for info in games_count if info.emoji]
+
+				# Check emoji config exists and update the emoji usage count
+				for info in games_count:
+					emoji_name = re.sub(r'[^a-zA-Z0-9]', '', info.name.lower())
+					if info.emoji:
+						emoji_data = guild_config["emojis"].get(emoji_name, None)
+						if emoji_data is not None:
+							emoji_data["times_used"] += info.count
+							emoji_data["last_used"] = datetime.now().isoformat()
+					else:
+						needed_emojis[emoji_name] = info.activity
 
 				if len(games_count) == 1:
 					info = games_count[0]
@@ -475,6 +563,11 @@ class StatusUpdater(commands.Cog):
 					self.log.error(f"Failed to update voice channel status for '{voice_channel.name}' with status code '{response.status}'\n {response}")
 			else:
 				self.log.info(f"Setting cached status of '{voice_channel.name}' to '{message}'")
+
+		if needed_emojis:
+			self.log.info(f"Adding emojis for games: {', '.join(needed_emojis.keys())}")
+			for activity in needed_emojis.values():
+				await self.upload_emoji(guild, activity)
 
 		if config_changed:
 			self.config.prune(guild.id, guild.voice_channels)
