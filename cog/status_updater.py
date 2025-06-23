@@ -10,7 +10,7 @@ from cog.steam_status import SteamPlayerSummaries
 import util
 import logging
 from typing_extensions import NotRequired
-from typing import TypedDict, Dict, Literal
+from typing import TypedDict, Dict, Literal, Callable, Awaitable
 import os
 import sys
 import re
@@ -119,12 +119,12 @@ class Config():
 		# prune members with no data (all fields None or empty)
 		keys_to_remove = [key for key, data in guild_data["members"].items() if all(not value for value in data.values())]
 		for key in keys_to_remove:
-			self.log.debug(f"Removing member with no data: {guild_data['members'][key]}")
+			self.log.info(f"Removing member with no data: {guild_data['members'][key]}")
 			guild_data["members"].pop(key)
 		# prune emojis with no data (all fields None or empty)
 		keys_to_remove = [key for key, data in guild_data["emojis"].items() if all(not value for value in data.values())]
 		for key in keys_to_remove:
-			self.log.debug(f"Removing emoji with no data: {guild_data['emojis'][key]}")
+			self.log.info(f"Removing emoji with no data: {guild_data['emojis'][key]}")
 			guild_data["emojis"].pop(key)
 		return bool(keys_to_remove)
 
@@ -198,7 +198,7 @@ class StatusUpdater(commands.Cog):
 		games_count = self.calculate_game_info(members, guild_config)
 		tracked = [(info.name, info.count) for info in games_count]
 		message = f"All activities: {activities}\nTracked games: {tracked}\nConfig: {config}"
-		self.log.debug(message)
+		self.log.info(message)
 		await interaction.response.send_message(message, ephemeral=True)
 
 	@app_commands.command(name='emoji', description="Edit config for the game, usually to add an emoji")
@@ -250,10 +250,11 @@ class StatusUpdater(commands.Cog):
 			self.log.info(f"Removed emoji {emoji} for game {game_name}")
 		elif action == "add":
 			emoji = emoji.strip() if emoji is not None and emoji.strip() != "" and " " not in emoji else None
+			maybe_defer, send_message = self.make_defer_callback(interaction)
 			if emoji is None and display_name is None:
-				emoji = await self.upload_emoji(guild, game)
+				emoji = await self.upload_emoji(guild, game, maybe_defer)
 				if emoji is None:
-					await interaction.response.send_message(f"Invalid input ({emoji}, {display_name})", ephemeral=True)
+					await send_message(f"Invalid input ({emoji}, {display_name})", ephemeral=True)
 					return
 			if game_config is None:
 				game_config = GameData()
@@ -264,7 +265,7 @@ class StatusUpdater(commands.Cog):
 				config["emojis"].pop(game_name, None)  # Remove emoji from auto emoji list
 			if display_name is not None:
 				game_config['display_name'] = display_name
-			await interaction.response.send_message(f"Added emoji {emoji} for game {game_name}", ephemeral=True)
+			await send_message(f"Added emoji {emoji} for game {game_name}", ephemeral=True)
 			self.log.info(f"Added emoji {emoji} for game {game_name}")
 		elif action == "ignore":
 			if game_config is None:
@@ -337,11 +338,35 @@ class StatusUpdater(commands.Cog):
 		if self.icon_list is None:
 			await interaction.response.send_message("Icon list not initialized yet. Please try again in a moment.", ephemeral=True)
 			return
-		icon_url = await self.icon_list.get_game_image(game, source)
+		maybe_defer, send_message = self.make_defer_callback(interaction)
+		icon_url = await self.icon_list.get_game_image(game, source, maybe_defer)
 		if icon_url is None:
-			await interaction.response.send_message("Unable to get game url for this game.", ephemeral=True)
+			await send_message("Unable to get game url for this game.", ephemeral=True)
 			return
-		await interaction.response.send_message(icon_url, ephemeral=True)
+		await send_message(icon_url, ephemeral=True)
+
+	@staticmethod
+	def make_defer_callback(interaction: discord.Interaction) -> tuple[Callable[[], Awaitable[None]], Callable[..., Awaitable[None]]]:
+		"""
+		Returns:
+		- `maybe_defer`: an async function to defer the interaction only once
+		- `send`: the correct send function (response.send_message or followup.send) based on defer status
+		"""
+		deferred = False
+
+		async def maybe_defer():
+			nonlocal deferred
+			if not deferred:
+				await interaction.response.defer(thinking=True, ephemeral=True)
+				deferred = True
+
+		async def send(*args, **kwargs):
+			if deferred:
+				return await interaction.followup.send(*args, **kwargs)
+			else:
+				return await interaction.response.send_message(*args, **kwargs)
+
+		return maybe_defer, send
 
 	@app_commands.command(name='reload', description="Restart the bot cause it broke")
 	async def reload(self, interaction: discord.Interaction) -> None:
@@ -349,7 +374,12 @@ class StatusUpdater(commands.Cog):
 		await interaction.response.send_message("Reloading...", ephemeral=True)
 		os.execv(sys.executable, ['python'] + sys.argv)
 
-	async def upload_emoji(self, guild: discord.Guild, activity: discord.Activity | discord.Game | str) -> str | None:
+	async def upload_emoji(
+		self,
+		guild: discord.Guild,
+		activity: discord.Activity | discord.Game | str,
+		on_slow_callback: Callable[[], Awaitable[None]] | None = None
+	) -> str | None:
 		"""Uploads an emoji for the given activity and returns the emoji name."""
 		if self.icon_list is None:
 			self.log.warning("Icon list not initialized yet. Unable to upload emoji.")
@@ -366,7 +396,7 @@ class StatusUpdater(commands.Cog):
 			self.log.warning(f"Emoji {emoji_name} already exists in guild config for {activity_name}")
 			return guild_config["emojis"][emoji_name]["emoji"]
 
-		image_data = await self.icon_list.fetch_game_image(activity, None)
+		image_data = await self.icon_list.fetch_game_image(activity, None, on_slow_callback)
 		if image_data is None:
 			self.log.warning(f"Failed to fetch image for activity {activity_name}. Cannot upload emoji.")
 			return None

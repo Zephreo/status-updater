@@ -6,6 +6,8 @@ import asyncio
 from discord.ext import commands
 from datetime import datetime, timedelta
 
+STALE_TIMEOUT = timedelta(minutes=15)  # Time after which the cache is considered stale
+
 class SteamPlayerSummaries:
 	poll_ids: dict[int, list[str]] # channel id to list non-duplicate steam id
 	cache: dict[str, PlayerSummary] # list of player summaries
@@ -43,8 +45,9 @@ class SteamPlayerSummaries:
 				except Exception as e:
 					if response.status == 429:
 						time_since_last_update: timedelta = datetime.now() - self.last_update_time
-						self.log.warning("Steam API rate limit reached, skipping poll, time since last update: %s", time_since_last_update)
-						if time_since_last_update > timedelta(minutes=5):
+						self.log.debug("Steam API rate limit reached, skipping poll, time since last update: %s", time_since_last_update)
+						if time_since_last_update > STALE_TIMEOUT:
+							self.log.warning(f"Steam API rate limit reached, clearing stale cache, time since last update: {time_since_last_update}", )
 							self.cache.clear() # clear stale cache
 						await asyncio.sleep(60)
 						return

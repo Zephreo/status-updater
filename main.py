@@ -31,5 +31,8 @@ bot = commands.Bot(command_prefix='(╯°□°)╯', intents=intents)
 # Load the first cog located at 'cog/bot.py'.
 asyncio.run(bot.load_extension('cog.bot'))
 
+if discord_token is None:
+	raise ValueError("DISCORD_TOKEN environment variable is not set. Please set it in the .env file as per the README.")
+
 # Run the bot.
 bot.run(discord_token)

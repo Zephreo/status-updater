@@ -5,6 +5,8 @@ import discord
 import aiohttp
 import logging
 import asyncio
+from PIL import Image, ImageSequence
+from io import BytesIO
 
 async def wait_for_connection(url: str = "https://www.google.com", max_retries: int = 15, retry_delay: float = 3.0) -> bool:
     """Wait for a connection to be available.
@@ -75,13 +77,17 @@ async def set_status(channel: discord.VoiceChannel, message: str) -> tuple[bool,
         async with session.put(url, headers=headers, json=data) as response:
             return response.status == 204, response
 
-async def check_resource_exists(url: str) -> bool:
+async def check_resource_exists(url: str | None) -> bool:
+    if not url:
+        return False
     async with aiohttp.ClientSession() as session:
         async with session.head(url) as response:
             return response.status == 200
 
 def setup_logging() -> logging.Logger:
-    level = logging.DEBUG
+    level = logging.INFO
+    if os.getenv('DEBUG') == '1':
+        level = logging.DEBUG
 
     terminal = logging.StreamHandler()
     log_file = logging.FileHandler('output.log', encoding='utf-8')
@@ -110,3 +116,22 @@ def setup_handler(handler):
         formatter = logging.Formatter('[{asctime}] [{levelname:<8}] {name}: {message}', dt_fmt, style='{')
 
     handler.setFormatter(formatter)
+
+def convert_ico_to_png(ico_bytes: bytes) -> bytes:
+    with Image.open(BytesIO(ico_bytes)) as img:
+        img = img.convert("RGBA")
+        largest_frame = max(
+            (frame.copy() for frame in ImageSequence.Iterator(img)),
+            key=lambda f: f.size[0] * f.size[1],
+            default=img
+        )
+        buf = BytesIO()
+        largest_frame.save(buf, format="PNG")
+        return buf.getvalue()
+
+def get_img_type(image_data: bytes) -> str | None:
+    try:
+        with Image.open(BytesIO(image_data)) as img:
+            return img.format.lower()
+    except Exception:
+        return None
