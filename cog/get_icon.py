@@ -54,7 +54,6 @@ class IconList:
 			steam_app_id = str(steam_app_by_name[0]["appid"])
 			self.log.info("FOUND Steam app by name = %s", steam_app_by_name[0])
 			steamcmd_path = shutil.which("steamcmd")
-			self.log.info("steamcmd_path = %s", steamcmd_path)
 			if steamcmd_path:
 				if on_slow_callback:
 					await on_slow_callback()

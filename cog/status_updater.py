@@ -178,6 +178,7 @@ class StatusUpdater(commands.Cog):
 			return
 		self.config.get_channel(guild.id, interaction.channel_id)["current_message"] = None
 		await self.update_vc_status(guild, interaction.channel_id, True)
+		self.config.save()
 		await interaction.response.send_message("Updated Voice Status", ephemeral=True)
 
 	@app_commands.command(name='debug', description="Debug the current voice channel status")
@@ -405,9 +406,12 @@ class StatusUpdater(commands.Cog):
 		if len(guild_config["emojis"]) >= guild_config["emoji_create_limit"]:
 			# LRU remove the least recently used emoji
 			emoji_to_remove = min(guild_config["emojis"].values(), key=lambda e: datetime.fromisoformat(e.get("last_used", e["created_at"])))
-			self.log.info(f"Guild {guild.name} has reached emoji create limit of {guild_config['emoji_create_limit']}. Removing least recently used emoji <{emoji_to_remove.name}:{emoji_to_remove}> to make space.")
-			await guild.delete_emoji(discord.Emoji(id=emoji_to_remove["id"], name=emoji_to_remove["name"], guild=guild), 
-				f"Removing bot managed emoji to make space for {activity_name}, last used at {emoji_to_remove.get('last_used', None)}, created at {emoji_to_remove['created_at']}, times used {emoji_to_remove['times_used']}")
+			self.log.info(f"Guild {guild.name} has reached emoji create limit of {guild_config['emoji_create_limit']}. Removing least recently used emoji ({emoji_to_remove['name']}) to make space. data = {emoji_to_remove}")
+			emoji_obj_to_remove = guild.get_emoji(emoji_to_remove["id"])  # Ensure the emoji exists in the guild
+			await guild.delete_emoji(
+				emoji_obj_to_remove,
+				reason=f"Removing bot managed emoji to make space for {activity_name}, last used at {emoji_to_remove.get('last_used', None)}, created at {emoji_to_remove['created_at']}, times used {emoji_to_remove['times_used']}"
+			)
 			guild_config["emojis"].pop(emoji_to_remove["name"], None)
 			# Remove all the games that contain this emoji from the game config
 			for game_name, game_config in guild_config["games"].items():
@@ -508,6 +512,7 @@ class StatusUpdater(commands.Cog):
 			current_timestamp = time.time()
 			if (current_timestamp - last_timestamp) > UPDATE_INTERVAL + SLEEP_THRESHOLD:
 				self.log.warning("System likely went to sleep and then resumed!, Reloading...")
+				self.config.save()
 				subprocess.Popen([sys.executable] + sys.argv)
 				os._exit(0)
 			last_timestamp = current_timestamp
@@ -557,6 +562,7 @@ class StatusUpdater(commands.Cog):
 					if info.emoji:
 						emoji_data = guild_config["emojis"].get(emoji_name, None)
 						if emoji_data is not None:
+							config_changed = True
 							emoji_data["times_used"] += info.count
 							emoji_data["last_used"] = datetime.now().isoformat()
 					else:
@@ -578,7 +584,7 @@ class StatusUpdater(commands.Cog):
 						message = f"Playing {len(games_count)} games"
 
 			# Check cache for changes
-			if channel_config["current_message"] == message:
+			if channel_config["current_message"] == message and not force:
 				continue
 			channel_config["current_message"] = message
 			config_changed = True
