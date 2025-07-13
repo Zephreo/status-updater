@@ -389,6 +389,10 @@ class StatusUpdater(commands.Cog):
 		activity_name = activity if isinstance(activity, str) else str(activity.name)
 		game_config = guild_config["games"].get(activity_name, None)
 		emoji_name = re.sub(r'[^a-zA-Z0-9]', '', activity_name.lower()) # Remove non-alphanumeric characters
+		# 2 >< 32 character validation?
+		if len(emoji_name) < 2 or len(emoji_name) > 32:
+			self.log.warning(f"Emoji name {emoji_name} for activity {activity_name} is not valid ({len(emoji_name)} characters, should be <= 32). Cannot upload emoji.")
+			return None
 
 		if game_config is not None:
 			self.log.warning(f"Game config for {activity_name} already exists")
@@ -408,16 +412,17 @@ class StatusUpdater(commands.Cog):
 			emoji_to_remove = min(guild_config["emojis"].values(), key=lambda e: datetime.fromisoformat(e.get("last_used", e["created_at"])))
 			self.log.info(f"Guild {guild.name} has reached emoji create limit of {guild_config['emoji_create_limit']}. Removing least recently used emoji ({emoji_to_remove['name']}) to make space. data = {emoji_to_remove}")
 			emoji_obj_to_remove = guild.get_emoji(emoji_to_remove["id"])  # Ensure the emoji exists in the guild
-			await guild.delete_emoji(
-				emoji_obj_to_remove,
-				reason=f"Removing bot managed emoji to make space for {activity_name}, last used at {emoji_to_remove.get('last_used', None)}, created at {emoji_to_remove['created_at']}, times used {emoji_to_remove['times_used']}"
-			)
+			if emoji_obj_to_remove is not None:
+				await guild.delete_emoji(
+					emoji_obj_to_remove,
+					reason=f"Removing bot managed emoji to make space for {activity_name}, last used at {emoji_to_remove.get('last_used', None)}, created at {emoji_to_remove['created_at']}, times used {emoji_to_remove['times_used']}"
+				)
 			guild_config["emojis"].pop(emoji_to_remove["name"], None)
 			# Remove all the games that contain this emoji from the game config
-			for game_name, game_config in guild_config["games"].items():
-				if game_config.get("emoji") == emoji_to_remove["emoji"]:
-					self.log.info(f"Removing game {game_name} from config because it used the removed emoji {emoji_to_remove['emoji']}, config: {game_config}")
-					guild_config["games"].pop(game_name, None)
+			games_to_remove = [(game_name, game_config) for game_name, game_config in guild_config["games"].items() if game_config.get("emoji") == emoji_to_remove["emoji"]]
+			for game_name, game_config in games_to_remove:
+				self.log.info(f"Removing game {game_name} from config because it used the removed emoji {emoji_to_remove['emoji']}, config: {game_config}")
+				guild_config["games"].pop(game_name, None)
 
 		emoji_obj = await guild.create_custom_emoji(name=emoji_name, image=image_data)
 		self.log.info(f"Uploaded emoji {str(emoji_obj)} for game {activity_name}")
