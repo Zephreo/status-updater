@@ -286,7 +286,7 @@ class StatusUpdater(commands.Cog):
 	async def edit_config(
 		self,
 		interaction: discord.Interaction,
-		key: Literal["steam_id"],
+		key: Literal["steam_id", "emoji_create_limit"],
 		value: str | None,
 		target_user: discord.User | None
 	) -> None:
@@ -310,6 +310,23 @@ class StatusUpdater(commands.Cog):
 			else:
 				member_config["steam_id"] = value
 			await interaction.response.send_message(f"Set steam_id to {value} for {member.name}", ephemeral=True)
+		if key == "emoji_create_limit":
+			guild_config = self.config.get_guild(guild.id)
+			limit_value = DEFAULT_EMOJI_CREATE_LIMIT
+			original_value = guild_config.get("emoji_create_limit", None)
+			if value is None:
+				guild_config["emoji_create_limit"] = DEFAULT_EMOJI_CREATE_LIMIT
+			else:
+				try:
+					limit_value = int(value)
+					if limit_value < 0:
+						await interaction.response.send_message("Emoji create limit must be a positive integer", ephemeral=True)
+						return
+					guild_config["emoji_create_limit"] = limit_value
+				except ValueError as e:
+					await interaction.response.send_message(f"Invalid value for emoji_create_limit: {e}", ephemeral=True)
+					return
+			await interaction.response.send_message(f"Set emoji_create_limit to {limit_value} for {guild.name} (was {original_value})", ephemeral=True)
 		self.config.prune(guild.id, guild.voice_channels)
 		self.config.save()
 
