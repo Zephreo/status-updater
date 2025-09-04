@@ -30,14 +30,16 @@ class IconList:
 			if discord_app:
 				rpc = await self.fetch_rpc(app_id)
 				self.log.info("FOUND discord app by application_id = %s, rpc = %s", discord_app, rpc)
-				return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
+				if 'icon' in rpc and rpc['icon']:
+					return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
 		activity_name = activity if isinstance(activity, str) else str(activity.name)
 		discord_app_by_name = self.find_discord_app_by_name(activity_name)
 		if self.is_discord_source(source) and discord_app_by_name:
 			app_id = discord_app_by_name['id']
 			rpc = await self.fetch_rpc(app_id)
 			self.log.info("FOUND discord app by name = %s, rpc = %s", discord_app_by_name, rpc)
-			return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
+			if 'icon' in rpc and rpc['icon']:
+				return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
 		if self.is_steam_source(source):
 			image_url = await self.get_steam_icon(activity_name, on_slow_callback)
 			if image_url:
@@ -92,7 +94,7 @@ class IconList:
 		async with aiohttp.ClientSession() as session:
 			async with session.get(url) as response:
 				if response.status != 200:
-					raise ValueError("Failed to fetch image")
+					raise ValueError("Failed to fetch image: ", url, response)
 				image_data = await response.read()
 
 		# Auto-convert ICO files to PNG

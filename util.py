@@ -8,7 +8,7 @@ import asyncio
 from PIL import Image, ImageSequence
 from io import BytesIO
 
-async def wait_for_connection(url: str = "https://www.google.com", max_retries: int = 15, retry_delay: float = 3.0) -> bool:
+async def wait_for_connection(url: str = "https://www.google.com", max_retries: int = -1, retry_delay: float = 5.0) -> bool:
     """Wait for a connection to be available.
 
     Args:
@@ -26,7 +26,7 @@ async def wait_for_connection(url: str = "https://www.google.com", max_retries: 
                     if response.status == 200:
                         return True
         except Exception as e:
-            if attempt < max_retries - 1:
+            if attempt < max_retries - 1 or max_retries < 0:
                 logging.debug(f"Connection attempt {attempt + 1} failed: {e}")
                 await asyncio.sleep(retry_delay)
             else:
