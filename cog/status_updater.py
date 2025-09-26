@@ -416,6 +416,10 @@ class StatusUpdater(commands.Cog):
 			return game_config.get("emoji", None)
 		if emoji_name in guild_config["emojis"]:
 			self.log.warning(f"Emoji {emoji_name} already exists in guild config for {activity_name}")
+			if guild_config["games"].get(activity_name, None) is None:
+				game_config = GameData()
+				game_config["emoji"] = guild_config["emojis"][emoji_name]["emoji"]
+				guild_config["games"][activity_name] = game_config
 			return guild_config["emojis"][emoji_name]["emoji"]
 
 		image_data = await self.icon_list.fetch_game_image(activity, None, on_slow_callback)

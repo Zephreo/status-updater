@@ -8,7 +8,7 @@ import asyncio
 from PIL import Image, ImageSequence
 from io import BytesIO
 
-async def wait_for_connection(url: str = "https://www.google.com", max_retries: int = -1, retry_delay: float = 5.0) -> bool:
+async def wait_for_connection(url: str = "https://www.google.com", max_retries: int = 30, retry_delay: float = 5.0) -> bool:
     """Wait for a connection to be available.
 
     Args:
