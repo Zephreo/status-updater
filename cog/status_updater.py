@@ -6,7 +6,7 @@ from discord import VoiceChannel
 from discord import app_commands
 import discord
 from discord.ext import commands
-from cog.steam_status import SteamPlayerSummaries
+from game_modules.status_poller import GenericPlayerPoller
 import util
 import logging
 from typing_extensions import NotRequired
@@ -15,6 +15,8 @@ import os
 import sys
 import re
 from datetime import datetime
+import game_modules.steam as steam_status
+import game_modules.roblox as roblox_status
 
 from cog.get_icon import IconList
 
@@ -43,6 +45,7 @@ class EmojiData(TypedDict):
 
 class MemberData(TypedDict):
 	steam_id: NotRequired[str]
+	roblox_id: NotRequired[str]
 
 class GuildData(TypedDict):
 	channels: Dict[str, ChannelData]
@@ -139,9 +142,9 @@ class StatusUpdater(commands.Cog):
 		self._bot = bot
 		self.log = util.setup_logging()
 		self.config = Config(self.log)
-		self.steam_status = SteamPlayerSummaries(self.log, bot)
+		self.steam_status = steam_status.create_steam_poller(bot, self.log)
+		self.roblox_status = roblox_status.create_roblox_poller(bot, self.log)
 		self._bot.loop.create_task(self.background_task())
-		self._bot.loop.create_task(self.steam_status.background_task())
 		self.icon_list = None  # Will be initialized in setup
 
 	@app_commands.command(name='toggle', description="Toggle Voice Status updates for this channel")
@@ -199,6 +202,7 @@ class StatusUpdater(commands.Cog):
 		games_count = self.calculate_game_info(members, guild_config)
 		tracked = [(info.name, info.count) for info in games_count]
 		message = f"All activities: {activities}\nTracked games: {tracked}\nConfig: {config}"
+		self.log.info([activity for member in members for activity in member.activities])
 		self.log.info(message)
 		await interaction.response.send_message(message, ephemeral=True)
 
@@ -286,7 +290,7 @@ class StatusUpdater(commands.Cog):
 	async def edit_config(
 		self,
 		interaction: discord.Interaction,
-		key: Literal["steam_id", "emoji_create_limit"],
+		key: Literal["steam_id", "roblox_id", "emoji_create_limit"],
 		value: str | None,
 		target_user: discord.User | None
 	) -> None:
@@ -310,6 +314,13 @@ class StatusUpdater(commands.Cog):
 			else:
 				member_config["steam_id"] = value
 			await interaction.response.send_message(f"Set steam_id to {value} for {member.name}", ephemeral=True)
+		if key == "roblox_id":
+			member_config = self.config.get_member(guild.id, member.id)
+			if value is None:
+				member_config.pop("roblox_id", None)
+			else:
+				member_config["roblox_id"] = value
+			await interaction.response.send_message(f"Set roblox_id to {value} for {member.name}", ephemeral=True)
 		if key == "emoji_create_limit":
 			guild_config = self.config.get_guild(guild.id)
 			limit_value = DEFAULT_EMOJI_CREATE_LIMIT
@@ -462,22 +473,37 @@ class StatusUpdater(commands.Cog):
 		for activity in member.activities:
 			if isinstance(activity, (discord.Activity, discord.Game)):
 				games.append(activity)
-		if games:
-			return games
 		member_config = config["members"].get(str(member.id), {})
 		steam_id = member_config.get("steam_id", None)
-		steam_profile = self.steam_status.get_player_summary(steam_id)
-		return [discord.Game(steam_profile.game_name)] if steam_profile is not None and steam_profile.game_name is not None else []
+		steam_profile = self.steam_status.get_player_values(steam_id)
+		roblox_id = member_config.get("roblox_id", None)
+		roblox_profile = self.roblox_status.get_player_values(roblox_id)
+		if steam_profile is not None:
+			for game in steam_profile:
+				games.append(discord.Game(game))
+		if roblox_profile is not None:
+			for game in roblox_profile:
+				games.append(discord.Game(game))
+		return games
 
 	def get_tracked_games(self, member: discord.Member, config: GuildData) -> list[discord.Activity | discord.Game | str]:
 		discord_games: list[discord.Activity | discord.Game | str] = [activity for activity in member.activities if isinstance(activity, discord.Activity | discord.Game) and activity.name]
-		if discord_games:
-			return discord_games
 		member_config = config["members"].get(str(member.id), {})
 		steam_id = member_config.get("steam_id", None)
-		steam_profile = self.steam_status.get_player_summary(steam_id)
-		steam_games: list[discord.Activity | discord.Game | str] = [steam_profile.game_name] if steam_profile is not None and steam_profile.game_name is not None else []
-		return steam_games
+		steam_profile = self.steam_status.get_player_values(steam_id)
+		roblox_id = member_config.get("roblox_id", None)
+		roblox_profile = self.roblox_status.get_player_values(roblox_id)
+		result: list[discord.Activity | discord.Game | str] = []
+		if discord_games:
+			for game in discord_games:
+				result.append(game)
+		if steam_profile is not None:
+			for game in steam_profile:
+				result.append(game)
+		if roblox_profile is not None:
+			for game in roblox_profile:
+				result.append(game)
+		return result
 
 	def all_tracked_games(self, members: list[discord.Member], config: GuildData) -> list[discord.Activity | discord.Game | str]:
 		return [game for member in members for game in self.get_tracked_games(member, config)]
@@ -527,6 +553,12 @@ class StatusUpdater(commands.Cog):
 		steam_ids = [guild_config["members"].get(str(member.id), {}).get("steam_id", None) for member in members]
 		return [steam_id for steam_id in steam_ids if steam_id is not None]
 
+	def get_roblox_ids(self, members: list[discord.Member], guild_config: GuildData) -> list[str]:
+		"""Extracts roblox IDs from the guild configuration for the given members."""
+		# member could not exist
+		roblox_ids = [guild_config["members"].get(str(member.id), {}).get("roblox_id", None) for member in members]
+		return [roblox_id for roblox_id in roblox_ids if roblox_id is not None]
+
 	async def background_task(self):
 		await self._bot.wait_until_ready()
 		last_timestamp = time.time()
@@ -575,6 +607,9 @@ class StatusUpdater(commands.Cog):
 			# add any members to be tracked by steam filter None values
 			steam_ids = self.get_steam_ids(members, guild_config)
 			self.steam_status.set_poll(voice_channel.id, steam_ids)
+
+			roblox_ids = self.get_roblox_ids(members, guild_config)
+			self.roblox_status.set_poll(voice_channel.id, roblox_ids)
 
 			games_count = self.calculate_game_info(members, guild_config)
 
@@ -638,6 +673,8 @@ class StatusUpdater(commands.Cog):
 	async def setup(self):
 		"""Async setup method to initialize async components."""
 		self.icon_list = await IconList.create(self.log)
+		await self.steam_status.start_background_task()
+		await self.roblox_status.start_background_task()
 
 # https://discord.com/oauth2/authorize?client_id=1151102788420501507&permissions=281477124194320&scope=bot
 
