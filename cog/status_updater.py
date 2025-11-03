@@ -359,7 +359,9 @@ class StatusUpdater(commands.Cog):
 		if member is None:
 			await interaction.response.send_message("Failed to get user data", ephemeral=True)
 			return
-		tracked_games = self.get_game_info(member, self.config.get_guild(guild.id))
+		config = self.config.get_guild(guild.id)
+		tracked_games = self.get_game_info(member, config)
+		tracked_games = [info for info in tracked_games if config["games"].get(str(info.name), GameData()).get("ignore", False) is not True]
 		if not tracked_games or len(tracked_games) < 1 or tracked_games[0] is None:
 			await interaction.response.send_message("User is not playing any games.", ephemeral=True)
 			return
