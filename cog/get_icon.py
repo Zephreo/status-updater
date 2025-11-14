@@ -6,6 +6,7 @@ import logging
 import subprocess
 import re
 import shutil
+import json
 
 CLIENT_ICON_REGEX = re.compile(r'^\s*"clienticon"\s+"([^"]+)"\s*$', re.MULTILINE)
 
@@ -151,8 +152,16 @@ class IconList:
 		async with aiohttp.ClientSession() as session:
 			self.log.info("Loading Steam detectable applications")
 			async with session.get("https://api.steampowered.com/ISteamApps/GetAppList/v2/") as response:
-				steam_app_list_response = dict(await response.json())
-				self.steam_app_list = steam_app_list_response['applist']['apps']
+				if response.status == 200:
+					steam_app_list_response = await response.json()
+					# save to file /cache/steam_app_list.json
+					json.dump(steam_app_list_response, open("cache/steam_app_list.json", "w"))
+				else:
+					self.log.error("Failed to load Steam app list, status code: %s", response.status)
+					# try to load from file /cache/steam_app_list.json
+					with open("cache/steam_app_list.json", "r", encoding="utf-8") as f:
+						steam_app_list_response = json.load(f)
+				self.steam_app_list = dict(steam_app_list_response)['applist']['apps']
 				self.log.info("Loading Steam detectable applications finished")
 
 	@staticmethod

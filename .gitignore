@@ -175,3 +175,4 @@ poetry.toml
 data.json
 config.json
 .DS_Store
+/cache

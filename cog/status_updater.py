@@ -202,7 +202,7 @@ class StatusUpdater(commands.Cog):
 		games_count = self.calculate_game_info(members, guild_config)
 		tracked = [(info.name, info.count) for info in games_count]
 		message = f"All activities: {activities}\nTracked games: {tracked}\nConfig: {config}"
-		self.log.info([activity for member in members for activity in member.activities])
+		self.log.info([(member.name, activity) for member in members for activity in member.activities])
 		self.log.info(message)
 		await interaction.response.send_message(message, ephemeral=True)
 
