@@ -613,6 +613,9 @@ class StatusUpdater(commands.Cog):
 			roblox_ids = self.get_roblox_ids(members, guild_config)
 			self.roblox_status.set_poll(voice_channel.id, roblox_ids)
 
+			if not self.steam_status.is_ready() or not self.roblox_status.is_ready():
+				continue
+
 			games_count = self.calculate_game_info(members, guild_config)
 
 			message = ""

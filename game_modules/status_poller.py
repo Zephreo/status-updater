@@ -45,6 +45,8 @@ class GenericPlayerPoller:
         self._log = logger
         self._bot = bot
         self._fetch = fetch_func
+        self._ready = asyncio.Event()
+        self._ids_available = asyncio.Event()
 
         self.poll_ids = {}
         self.cache = {}
@@ -64,12 +66,16 @@ class GenericPlayerPoller:
     def set_poll(self, channel_id: int, external_ids: Iterable[str]) -> None:
         """Replace the list of ids to poll for a channel."""
         self.poll_ids[channel_id] = list(external_ids)
+        if not self._ids_available.is_set():
+            self._ids_available.set()
 
     def add_to_poll(self, channel_id: int, external_ids: Iterable[str]) -> None:
         """Append ids to a channel's poll list."""
         cur = self.poll_ids.get(channel_id, [])
         cur.extend(list(external_ids))
         self.poll_ids[channel_id] = cur
+        if not self._ids_available.is_set():
+            self._ids_available.set()
 
     def remove_channel(self, channel_id: int) -> None:
         self.poll_ids.pop(channel_id, None)
@@ -82,6 +88,12 @@ class GenericPlayerPoller:
         if external_id is None:
             return None
         return self.cache.get(external_id)
+    
+    def is_ready(self):
+        return self._ready.is_set()
+    
+    async def wait_ready(self):
+        await self._ready.wait()
 
     # ---------------- Background lifecycle ----------------
 
@@ -107,8 +119,11 @@ class GenericPlayerPoller:
     async def _run_loop(self) -> None:
         self._log.debug("GenericPlayerPoller background task started")
         try:
+            await self._ids_available.wait()
             while not self._stop_event.is_set() and not self._bot.is_closed():
                 await self._poll_once_with_backoff()
+                if not self._ready.is_set():
+                    self._ready.set()
                 try:
                     await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
                 except asyncio.TimeoutError:
