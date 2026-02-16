@@ -10,7 +10,7 @@ class PlayerSummary:
 	avatar_full: str
 	avatar_hash: str
 	last_log_off_timestamp: int
-	online_status: int
+	online_status: int # The user's current status. 0 - Offline, 1 - Online, 2 - Busy, 3 - Away, 4 - Snooze, 5 - looking to trade, 6 - looking to play. If the player's profile is private, this will always be "0", except is the user has set their status to looking to trade or looking to play, because a bug makes those status appear even if the profile is private.
 	primary_clan_id: str | None
 	user_created_at: int | None
 	player_status_flags: int | None

@@ -55,6 +55,7 @@ async def fetch_steam_summaries(log: logging.Logger, ids: List[str]) -> Dict[str
         except KeyError as e:
             continue
 
-        result[summary.steam_id] = [summary.game_name] if summary.game_name else []
+        is_valid = summary.online_status != 4 # != away
+        result[summary.steam_id] = [summary.game_name] if summary.game_name and is_valid else []
 
     return result

@@ -441,7 +441,7 @@ class StatusUpdater(commands.Cog):
 			return None
 
 		# check if server has reached emoji create limit
-		if len(guild_config["emojis"]) >= guild_config["emoji_create_limit"]:
+		while len(guild_config["emojis"]) >= guild_config["emoji_create_limit"]:
 			# LRU remove the least recently used emoji
 			emoji_to_remove = min(guild_config["emojis"].values(), key=lambda e: datetime.fromisoformat(e.get("last_used", e["created_at"])))
 			self.log.info(f"Guild {guild.name} has reached emoji create limit of {guild_config['emoji_create_limit']}. Removing least recently used emoji ({emoji_to_remove['name']}) to make space. data = {emoji_to_remove}")
@@ -455,6 +455,7 @@ class StatusUpdater(commands.Cog):
 			# Remove all the games that contain this emoji from the game config
 			games_to_remove = [(game_name, game_config) for game_name, game_config in guild_config["games"].items() if game_config.get("emoji") == emoji_to_remove["emoji"]]
 			for game_name, game_config in games_to_remove:
+				# TODO: only remove if it only contains emoji data otherwise only delete the emoji data instead and keep rest of config
 				self.log.info(f"Removing game {game_name} from config because it used the removed emoji {emoji_to_remove['emoji']}, config: {game_config}")
 				guild_config["games"].pop(game_name, None)
 
