@@ -148,6 +148,25 @@ class StatusUpdater(commands.Cog):
 		self._bot.loop.create_task(self.background_task())
 		self.icon_list = None  # Will be initialized in setup
 		self._failed_image_fetches: dict[str, int] = {}  # Track failure counts per app
+		self._member_games: dict[int, set[str]] = {}  # Track current games per member (member_id -> game names)
+
+	def log_activity_event(self, member: discord.Member, game: str, event: Literal["started", "stopped"]) -> None:
+		"""Log when a user starts or stops playing a game. Can be expanded for notifications, webhooks, etc."""
+		self.log.info(f"{member.name} {event} playing {game}")
+
+	def update_member_games(self, member: discord.Member, current_games: set[str]) -> None:
+		"""Track game changes for a member and log start/stop events."""
+		previous_games = self._member_games.get(member.id, set())
+
+		# Games that were started (in current but not previous)
+		for game in current_games - previous_games:
+			self.log_activity_event(member, game, "started")
+
+		# Games that were stopped (in previous but not current)
+		for game in previous_games - current_games:
+			self.log_activity_event(member, game, "stopped")
+
+		self._member_games[member.id] = current_games
 
 	@app_commands.command(name='toggle', description="Toggle Voice Status updates for this channel")
 	async def toggle(
@@ -625,6 +644,13 @@ class StatusUpdater(commands.Cog):
 
 			if not self.steam_status.is_ready() or not self.roblox_status.is_ready():
 				continue
+
+			# Track game start/stop events per member
+			for member in members:
+				current_games = {g if isinstance(g, str) else str(g.name) for g in self.get_tracked_games(member, guild_config)}
+				# Filter out ignored games
+				current_games = {game for game in current_games if not guild_config["games"].get(game, {}).get("ignore", False)}
+				self.update_member_games(member, current_games)
 
 			games_count = self.calculate_game_info(members, guild_config)
 
