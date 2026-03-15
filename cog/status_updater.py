@@ -24,6 +24,7 @@ CONFIG_FILE = "config.json"
 UPDATE_INTERVAL = 10
 SLEEP_THRESHOLD = 15
 DEFAULT_EMOJI_CREATE_LIMIT = 10
+IMAGE_FETCH_FAIL_THRESHOLD = 2  # Stop trying after this many failures
 
 class ChannelData(TypedDict):
 	active: bool
@@ -146,6 +147,7 @@ class StatusUpdater(commands.Cog):
 		self.roblox_status = roblox_status.create_roblox_poller(bot, self.log)
 		self._bot.loop.create_task(self.background_task())
 		self.icon_list = None  # Will be initialized in setup
+		self._failed_image_fetches: dict[str, int] = {}  # Track failure counts per app
 
 	@app_commands.command(name='toggle', description="Toggle Voice Status updates for this channel")
 	async def toggle(
@@ -435,9 +437,16 @@ class StatusUpdater(commands.Cog):
 				guild_config["games"][activity_name] = game_config
 			return guild_config["emojis"][emoji_name]["emoji"]
 
+		# Skip if this app has hit the failure threshold
+		fail_count = self._failed_image_fetches.get(activity_name, 0)
+		if fail_count >= IMAGE_FETCH_FAIL_THRESHOLD:
+			self.log.debug(f"Skipping image fetch for {activity_name} - failed {fail_count} times.")
+			return None
+
 		image_data = await self.icon_list.fetch_game_image(activity, None, on_slow_callback)
 		if image_data is None:
-			self.log.warning(f"Failed to fetch image for activity {activity_name}. Cannot upload emoji.")
+			self._failed_image_fetches[activity_name] = fail_count + 1
+			self.log.warning(f"Failed to fetch image for activity {activity_name} ({fail_count + 1}/{IMAGE_FETCH_FAIL_THRESHOLD}). Cannot upload emoji.")
 			return None
 
 		# check if server has reached emoji create limit
