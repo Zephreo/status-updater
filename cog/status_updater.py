@@ -150,21 +150,21 @@ class StatusUpdater(commands.Cog):
 		self._failed_image_fetches: dict[str, int] = {}  # Track failure counts per app
 		self._member_games: dict[int, set[str]] = {}  # Track current games per member (member_id -> game names)
 
-	def log_activity_event(self, member: discord.Member, game: str, event: Literal["started", "stopped"]) -> None:
+	async def log_activity_event(self, member: discord.Member, game: str, event: Literal["started", "stopped"]) -> None:
 		"""Log when a user starts or stops playing a game. Can be expanded for notifications, webhooks, etc."""
 		self.log.info(f"{member.name} {event} playing {game}")
 
-	def update_member_games(self, member: discord.Member, current_games: set[str]) -> None:
+	async def update_member_games(self, member: discord.Member, current_games: set[str]) -> None:
 		"""Track game changes for a member and log start/stop events."""
 		previous_games = self._member_games.get(member.id, set())
 
 		# Games that were started (in current but not previous)
 		for game in current_games - previous_games:
-			self.log_activity_event(member, game, "started")
+			await self.log_activity_event(member, game, "started")
 
 		# Games that were stopped (in previous but not current)
 		for game in previous_games - current_games:
-			self.log_activity_event(member, game, "stopped")
+			await self.log_activity_event(member, game, "stopped")
 
 		self._member_games[member.id] = current_games
 
@@ -229,15 +229,15 @@ class StatusUpdater(commands.Cog):
 
 	@app_commands.command(name='emoji', description="Edit config for the game, usually to add an emoji")
 	@app_commands.describe(
-        action="Whether to add or remove an emoji",
-        emoji="The emoji to add (ignored if removing)",
+        action="Whether to add, remove, ignore, or merge an emoji",
+        emoji="The emoji to add/remove, or two emojis separated by space for merge (keep second→first)",
         display_name="Override the game name with a custom display name",
         target_user="@Mention the user whose game you want to target (defaults to you if omitted)"
     )
 	async def emoji(
 		self,
 		interaction: discord.Interaction,
-		action: Literal["add", "remove", "ignore"],
+		action: Literal["add", "remove", "ignore", "merge"],
 		emoji: str | None,
 		display_name: str | None,
 		target_user: discord.User | None
@@ -249,6 +249,50 @@ class StatusUpdater(commands.Cog):
 		if guild is None:
 			await interaction.response.send_message("Must be run in the server where the emoji is to be added", ephemeral=True)
 			return
+		config = self.config.get_guild(guild.id)
+
+		if action == "merge":
+			if emoji is None:
+				await interaction.response.send_message("Provide two emojis separated by a space: `/emoji merge <keep> <remove>`", ephemeral=True)
+				return
+			parts = emoji.strip().split()
+			if len(parts) != 2:
+				await interaction.response.send_message("Provide exactly two emojis separated by a space: `/emoji merge <keep> <remove>`", ephemeral=True)
+				return
+			keep_emoji, remove_emoji = parts[0], parts[1]
+
+			# Update all games using the second emoji to use the first
+			games_updated = [
+				game_name for game_name, game_data in config["games"].items()
+				if game_data.get("emoji") == remove_emoji
+			]
+			for game_name in games_updated:
+				config["games"][game_name]["emoji"] = keep_emoji
+
+			# Find the second emoji in config["emojis"] and delete from guild
+			emoji_key_to_remove = next(
+				(key for key, data in config["emojis"].items() if data["emoji"] == remove_emoji),
+				None
+			)
+			emoji_id_to_delete = config["emojis"][emoji_key_to_remove]["id"] if emoji_key_to_remove else None
+			if emoji_key_to_remove:
+				config["emojis"].pop(emoji_key_to_remove)
+
+			if emoji_id_to_delete:
+				emoji_obj = guild.get_emoji(emoji_id_to_delete)
+				if emoji_obj is not None:
+					await guild.delete_emoji(emoji_obj, reason=f"Merging {remove_emoji} into {keep_emoji}")
+					self.log.info(f"Deleted guild emoji {remove_emoji} (id={emoji_id_to_delete}) during merge")
+
+			games_str = ", ".join(games_updated) if games_updated else "none"
+			await interaction.response.send_message(
+				f"Merged {remove_emoji} → {keep_emoji}. Updated games: {games_str}. Emoji deleted: {emoji_id_to_delete is not None}",
+				ephemeral=True
+			)
+			self.log.info(f"Merged emoji {remove_emoji} into {keep_emoji}, updated games: {games_str}")
+			self.config.save()
+			return
+
 		if target_user is None:
 			member = guild.get_member(interaction.user.id)
 		else:
@@ -256,7 +300,6 @@ class StatusUpdater(commands.Cog):
 		if member is None:
 			await interaction.response.send_message("Failed to get user data", ephemeral=True)
 			return
-		config = self.config.get_guild(guild.id)
 		tracked_games = self.get_tracked_games(member, config)
 		if not tracked_games or len(tracked_games) < 1 or tracked_games[0] is None:
 			await interaction.response.send_message("You are not playing any games.", ephemeral=True)
@@ -650,7 +693,7 @@ class StatusUpdater(commands.Cog):
 				current_games = {g if isinstance(g, str) else str(g.name) for g in self.get_tracked_games(member, guild_config)}
 				# Filter out ignored games
 				current_games = {game for game in current_games if not guild_config["games"].get(game, {}).get("ignore", False)}
-				self.update_member_games(member, current_games)
+				await self.update_member_games(member, current_games)
 
 			games_count = self.calculate_game_info(members, guild_config)
 
