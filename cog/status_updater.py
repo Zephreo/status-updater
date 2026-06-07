@@ -269,20 +269,25 @@ class StatusUpdater(commands.Cog):
 			for game_name in games_updated:
 				config["games"][game_name]["emoji"] = keep_emoji
 
-			# Find the second emoji in config["emojis"] and delete from guild
+			# Remove the second emoji from config["emojis"] if present
 			emoji_key_to_remove = next(
 				(key for key, data in config["emojis"].items() if data["emoji"] == remove_emoji),
 				None
 			)
-			emoji_id_to_delete = config["emojis"][emoji_key_to_remove]["id"] if emoji_key_to_remove else None
 			if emoji_key_to_remove:
 				config["emojis"].pop(emoji_key_to_remove)
+
+			# Parse the emoji ID directly from the emoji string <:name:id>
+			emoji_id_match = re.search(r':(\d+)>', remove_emoji)
+			emoji_id_to_delete = int(emoji_id_match.group(1)) if emoji_id_match else None
 
 			if emoji_id_to_delete:
 				emoji_obj = guild.get_emoji(emoji_id_to_delete)
 				if emoji_obj is not None:
 					await guild.delete_emoji(emoji_obj, reason=f"Merging {remove_emoji} into {keep_emoji}")
 					self.log.info(f"Deleted guild emoji {remove_emoji} (id={emoji_id_to_delete}) during merge")
+				else:
+					self.log.warning(f"Emoji {remove_emoji} (id={emoji_id_to_delete}) not found in guild during merge")
 
 			games_str = ", ".join(games_updated) if games_updated else "none"
 			await interaction.response.send_message(
