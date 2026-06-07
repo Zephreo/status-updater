@@ -472,6 +472,11 @@ class StatusUpdater(commands.Cog):
 	async def reload(self, interaction: discord.Interaction) -> None:
 		self.log.warning(f"User '{interaction.user.name}' ran /reload command for channel '{getattr(interaction.channel, 'name', None)}'")
 		await interaction.response.send_message("Reloading...", ephemeral=True)
+		# Release the instance lock before exec so the replacement process can
+		# acquire it immediately on its first attempt instead of hitting the retry loop.
+		if util._instance_lock_socket is not None:
+			util._instance_lock_socket.close()
+			util._instance_lock_socket = None
 		os.execv(sys.executable, ['python'] + sys.argv)
 
 	async def upload_emoji(

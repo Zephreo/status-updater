@@ -1,12 +1,61 @@
 """Contains functions that are useful throughout the program."""
 
 import os
+import socket
+import sys
+import time
 import discord
 import aiohttp
 import logging
 import asyncio
 from PIL import Image, ImageSequence
 from io import BytesIO
+
+INSTANCE_LOCK_PORT = 47372
+_instance_lock_socket: socket.socket | None = None
+
+def acquire_instance_lock(
+    port: int = INSTANCE_LOCK_PORT,
+    retry_interval: float = 0.5,
+    max_wait: float = 5.0,
+) -> None:
+    """Bind a localhost socket to enforce a single running instance.
+
+    The OS automatically releases the socket on any kind of exit (os._exit,
+    crash, SIGKILL, etc.), so stale locks are impossible.
+
+    Retries up to *max_wait* seconds to tolerate the brief overlap during the
+    sleep/resume restart path where subprocess.Popen starts the child before
+    the parent calls os._exit().
+    """
+    global _instance_lock_socket
+    deadline = time.monotonic() + max_wait
+    attempt = 0
+    while True:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):  # Windows: prevent SO_REUSEADDR bypass
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        try:
+            sock.bind(('127.0.0.1', port))
+            _instance_lock_socket = sock
+            logging.debug(f"[instance-lock] Acquired lock on port {port}")
+            return
+        except OSError:
+            sock.close()
+            attempt += 1
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                print(
+                    f"[instance-lock] Another instance is already running (port {port} busy). "
+                    f"Exiting after {attempt} attempt(s).",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            logging.debug(
+                f"[instance-lock] Port {port} busy, retrying in {retry_interval}s "
+                f"({remaining:.1f}s left, attempt {attempt})..."
+            )
+            time.sleep(retry_interval)
 
 async def wait_for_connection(url: str = "https://www.google.com", max_retries: int = 30, retry_delay: float = 5.0) -> bool:
     """Wait for a connection to be available.

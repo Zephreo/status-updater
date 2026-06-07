@@ -19,6 +19,10 @@ intents.presences = True
 # Load variables from '.env' file into the environment.
 load_dotenv()
 
+# Prevent multiple instances from running simultaneously.
+# Binds a localhost socket; the OS releases it automatically on any exit.
+util.acquire_instance_lock()
+
 # Get the Discord token from the environment.
 discord_token = os.getenv('DISCORD_TOKEN')
 
