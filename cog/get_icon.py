@@ -3,12 +3,17 @@ import util
 import discord
 import aiohttp
 import logging
+import os
 import subprocess
 import re
 import shutil
 import json
 
 CLIENT_ICON_REGEX = re.compile(r'^\s*"clienticon"\s+"([^"]+)"\s*$', re.MULTILINE)
+
+STEAM_APP_LIST_URL = "https://api.steampowered.com/IStoreService/GetAppList/v1/"
+STEAM_APP_LIST_CACHE = "cache/steam_app_list.json"
+STEAM_APP_LIST_PAGE_SIZE = 50000
 
 class IconList:
 	log: logging.Logger
@@ -34,17 +39,19 @@ class IconList:
 				if 'icon' in rpc and rpc['icon']:
 					return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
 		activity_name = activity if isinstance(activity, str) else str(activity.name)
-		discord_app_by_name = self.find_discord_app_by_name(activity_name)
-		if self.is_discord_source(source) and discord_app_by_name:
-			app_id = discord_app_by_name['id']
-			rpc = await self.fetch_rpc(app_id)
-			self.log.info("FOUND discord app by name = %s, rpc = %s", discord_app_by_name, rpc)
-			if 'icon' in rpc and rpc['icon']:
-				return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
-		if self.is_steam_source(source):
-			image_url = await self.get_steam_icon(activity_name, on_slow_callback)
-			if image_url:
-				return image_url
+		# A demo falls back to the main game's icon so both share one emoji
+		for name in dict.fromkeys([activity_name, util.base_game_name(activity_name)]):
+			discord_app_by_name = self.find_discord_app_by_name(name)
+			if self.is_discord_source(source) and discord_app_by_name:
+				app_id = discord_app_by_name['id']
+				rpc = await self.fetch_rpc(app_id)
+				self.log.info("FOUND discord app by name = %s, rpc = %s", discord_app_by_name, rpc)
+				if 'icon' in rpc and rpc['icon']:
+					return f"https://cdn.discordapp.com/app-icons/{app_id}/{rpc['icon']}.png"
+			if self.is_steam_source(source):
+				image_url = await self.get_steam_icon(name, on_slow_callback)
+				if image_url:
+					return image_url
 		return None
 
 	async def get_steam_icon(
@@ -149,20 +156,48 @@ class IconList:
 			self.log.info("Loading Discord detectable applications finished")
 
 	async def load_steam_application_list(self):
+		self.log.info("Loading Steam detectable applications")
+		try:
+			self.steam_app_list = await self.fetch_steam_application_list()
+			# save to file /cache/steam_app_list.json
+			with open(STEAM_APP_LIST_CACHE, "w", encoding="utf-8") as f:
+				json.dump(self.steam_app_list, f)
+		except Exception as e:
+			self.log.error("Failed to load Steam app list: %s", e)
+			# try to load from file /cache/steam_app_list.json
+			try:
+				with open(STEAM_APP_LIST_CACHE, "r", encoding="utf-8") as f:
+					self.steam_app_list = json.load(f)
+			except Exception as cache_error:
+				self.log.error("Failed to load cached Steam app list: %s", cache_error)
+				self.steam_app_list = []
+		self.log.info("Loading Steam detectable applications finished, %s apps", len(self.steam_app_list))
+
+	async def fetch_steam_application_list(self) -> list:
+		"""Fetch the full Steam app list, paging through IStoreService until it reports no more results."""
+		apps = []
+		last_appid = 0
 		async with aiohttp.ClientSession() as session:
-			self.log.info("Loading Steam detectable applications")
-			async with session.get("https://api.steampowered.com/ISteamApps/GetAppList/v2/") as response:
-				if response.status == 200:
-					steam_app_list_response = await response.json()
-					# save to file /cache/steam_app_list.json
-					json.dump(steam_app_list_response, open("cache/steam_app_list.json", "w"))
-				else:
-					self.log.error("Failed to load Steam app list, status code: %s", response.status)
-					# try to load from file /cache/steam_app_list.json
-					with open("cache/steam_app_list.json", "r", encoding="utf-8") as f:
-						steam_app_list_response = json.load(f)
-				self.steam_app_list = dict(steam_app_list_response)['applist']['apps']
-				self.log.info("Loading Steam detectable applications finished")
+			while True:
+				params = {
+					"key": os.getenv("STEAM_KEY", ""),
+					"include_games": "true",
+					"max_results": str(STEAM_APP_LIST_PAGE_SIZE),
+				}
+				if last_appid:
+					params["last_appid"] = str(last_appid)
+				async with session.get(STEAM_APP_LIST_URL, params=params) as response:
+					if response.status != 200:
+						raise ValueError(f"Steam app list request failed, status code: {response.status}")
+					page = (await response.json()).get('response', {})
+				apps.extend(page.get('apps', []))
+				if not page.get('have_more_results'):
+					return apps
+				next_appid = page.get('last_appid')
+				if not next_appid or next_appid == last_appid:
+					self.log.warning("Steam app list pagination stalled after appid %s", last_appid)
+					return apps
+				last_appid = next_appid
 
 	@staticmethod
 	async def fetch_rpc(id: str) -> dict:

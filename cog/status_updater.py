@@ -63,6 +63,7 @@ class GameInfo:
 	count: int
 	name: str
 	activity: discord.Activity | discord.Game | str
+	demo: bool # Whether name currently comes from a demo rather than the main game
 
 class Config():
 	"""Allows configuration of the bot via commands. Stored to disk."""
@@ -136,6 +137,31 @@ def find_alias(emojis: dict[str, GameInfo], emoji: str):
 	for game, data in emojis.items():
 		if emoji == data.emoji:
 			return game, data
+
+base_game_name = util.base_game_name
+is_demo = util.is_demo
+
+def emoji_name_for(game_name: str) -> str:
+	"""The config/guild emoji name for a game, shared between a game and its demo."""
+	return re.sub(r'[^a-zA-Z0-9]', '', base_game_name(game_name).lower())
+
+def resolve_game_config(config: GuildData, game_name: str) -> GameData | None:
+	"""Gets the config for a game, falling back to the main game's config for a demo."""
+	game_config = config["games"].get(game_name, None)
+	if game_config is not None:
+		return game_config
+	return config["games"].get(base_game_name(game_name), None)
+
+def resolve_game_name(config: GuildData, game_name: str) -> str:
+	"""Applies any display_name override, keeping the 'Demo' suffix when it came from the main game."""
+	game_config = config["games"].get(game_name, None)
+	if game_config is not None and game_config.get("display_name"):
+		return game_config["display_name"]
+	if is_demo(game_name):
+		base_config = config["games"].get(base_game_name(game_name), None)
+		if base_config is not None and base_config.get("display_name"):
+			return f"{base_config['display_name']} Demo"
+	return game_name
 
 class StatusUpdater(commands.Cog):
 
@@ -430,7 +456,7 @@ class StatusUpdater(commands.Cog):
 			return
 		config = self.config.get_guild(guild.id)
 		tracked_games = self.get_game_info(member, config)
-		tracked_games = [info for info in tracked_games if config["games"].get(str(info.name), GameData()).get("ignore", False) is not True]
+		tracked_games = [info for info in tracked_games if (resolve_game_config(config, str(info.name)) or GameData()).get("ignore", False) is not True]
 		if not tracked_games or len(tracked_games) < 1 or tracked_games[0] is None:
 			await interaction.response.send_message("User is not playing any games.", ephemeral=True)
 			return
@@ -491,8 +517,9 @@ class StatusUpdater(commands.Cog):
 			return None
 		guild_config = self.config.get_guild(guild.id)
 		activity_name = activity if isinstance(activity, str) else str(activity.name)
-		game_config = guild_config["games"].get(activity_name, None)
-		emoji_name = re.sub(r'[^a-zA-Z0-9]', '', activity_name.lower()) # Remove non-alphanumeric characters
+		game_name = base_game_name(activity_name) # A demo shares the main game's emoji
+		game_config = resolve_game_config(guild_config, activity_name)
+		emoji_name = emoji_name_for(activity_name) # Remove non-alphanumeric characters
 		# 2 >< 32 character validation?
 		if len(emoji_name) < 2 or len(emoji_name) > 32:
 			self.log.warning(f"Emoji name {emoji_name} for activity {activity_name} is not valid ({len(emoji_name)} characters, should be <= 32). Cannot upload emoji.")
@@ -503,10 +530,10 @@ class StatusUpdater(commands.Cog):
 			return game_config.get("emoji", None)
 		if emoji_name in guild_config["emojis"]:
 			self.log.warning(f"Emoji {emoji_name} already exists in guild config for {activity_name}")
-			if guild_config["games"].get(activity_name, None) is None:
+			if guild_config["games"].get(game_name, None) is None:
 				game_config = GameData()
 				game_config["emoji"] = guild_config["emojis"][emoji_name]["emoji"]
-				guild_config["games"][activity_name] = game_config
+				guild_config["games"][game_name] = game_config
 			return guild_config["emojis"][emoji_name]["emoji"]
 
 		# Skip if this app has hit the failure threshold
@@ -547,7 +574,7 @@ class StatusUpdater(commands.Cog):
 		# add emoji to game config
 		game_config = GameData()
 		game_config["emoji"] = str(emoji_obj)
-		guild_config["games"][activity_name] = game_config
+		guild_config["games"][game_name] = game_config
 
 		self.config.save()
 		return str(emoji_obj)
@@ -599,34 +626,39 @@ class StatusUpdater(commands.Cog):
 		game_info: dict[str, GameInfo] = {}
 		for game in games:
 			game_name = game if isinstance(game, str) else str(game.name)
-			if game_name in game_info:
-				info = game_info[game_name]
+			key = base_game_name(game_name) # A demo counts towards the main game
+			if key in game_info:
+				info = game_info[key]
 				info.count += 1
+				# The main game's name wins over a demo's
+				if info.demo and not is_demo(game_name):
+					info.name = resolve_game_name(config, game_name)
+					info.demo = False
+					info.activity = game
 				continue
 			info = GameInfo()
 			info.name = game_name
 			info.count = 1
 			info.emoji = None
 			info.activity = game
-			game_config = None
-			if game_name in config["games"]:
-				game_config = config["games"][game_name]
+			info.demo = is_demo(game_name)
+			game_config = resolve_game_config(config, game_name)
 			if game_config is not None:
-				if "ignore" in game_config and game_config["ignore"]:
+				if game_config.get("ignore", False):
 					continue
-				if "display_name" in game_config and game_config["display_name"] is not None:
-					info.name = game_config["display_name"]
-				info.emoji = game_config["emoji"]
-				temp = find_alias(game_info, game_config["emoji"])
-				if temp is not None:
-					game_name, alias = temp
-					if "display_name" in game_config and game_config["display_name"] is not None:
-						alias.name = game_config["display_name"]
-					info = alias
-					info.count += 1
-					if isinstance(info.activity, str):
-						info.activity = game
-			game_info[game_name] = info
+				info.name = resolve_game_name(config, game_name)
+				info.emoji = game_config.get("emoji", None)
+				if info.emoji is not None:
+					temp = find_alias(game_info, info.emoji)
+					if temp is not None:
+						key, alias = temp
+						if info.name != game_name:
+							alias.name = info.name
+						info = alias
+						info.count += 1
+						if isinstance(info.activity, str):
+							info.activity = game
+			game_info[key] = info
 		games_count = list(game_info.values())
 		games_count.sort(key=lambda x: x.count, reverse=True)
 		return games_count
@@ -702,7 +734,7 @@ class StatusUpdater(commands.Cog):
 			for member in members:
 				current_games = {g if isinstance(g, str) else str(g.name) for g in self.get_tracked_games(member, guild_config)}
 				# Filter out ignored games
-				current_games = {game for game in current_games if not guild_config["games"].get(game, {}).get("ignore", False)}
+				current_games = {game for game in current_games if not (resolve_game_config(guild_config, game) or {}).get("ignore", False)}
 				await self.update_member_games(member, current_games)
 
 			games_count = self.calculate_game_info(members, guild_config)
@@ -713,7 +745,7 @@ class StatusUpdater(commands.Cog):
 
 				# Check emoji config exists and update the emoji usage count
 				for info in games_count:
-					emoji_name = re.sub(r'[^a-zA-Z0-9]', '', info.name.lower())
+					emoji_name = emoji_name_for(info.name)
 					if info.emoji:
 						emoji_data = guild_config["emojis"].get(emoji_name, None)
 						if emoji_data is not None:

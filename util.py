@@ -1,6 +1,7 @@
 """Contains functions that are useful throughout the program."""
 
 import os
+import re
 import socket
 import sys
 import time
@@ -177,6 +178,16 @@ def convert_ico_to_png(ico_bytes: bytes) -> bytes:
         buf = BytesIO()
         largest_frame.save(buf, format="PNG")
         return buf.getvalue()
+
+DEMO_SUFFIX_REGEX = re.compile(r'\s+demo$', re.IGNORECASE)
+
+def base_game_name(game_name: str) -> str:
+    """Strips a trailing 'Demo' so a demo counts as, and shares config with, the main game."""
+    stripped = DEMO_SUFFIX_REGEX.sub('', game_name).strip()
+    return stripped if stripped else game_name
+
+def is_demo(game_name: str) -> bool:
+    return base_game_name(game_name) != game_name
 
 def get_img_type(image_data: bytes) -> str | None:
     try:
