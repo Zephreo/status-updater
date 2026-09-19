@@ -560,21 +560,24 @@ class StatusUpdater(commands.Cog):
 					reason=f"Removing bot managed emoji to make space for {activity_name}, last used at {emoji_to_remove.get('last_used', None)}, created at {emoji_to_remove['created_at']}, times used {emoji_to_remove['times_used']}"
 				)
 			guild_config["emojis"].pop(emoji_to_remove["name"], None)
-			# Remove all the games that contain this emoji from the game config
-			games_to_remove = [(game_name, game_config) for game_name, game_config in guild_config["games"].items() if game_config.get("emoji") == emoji_to_remove["emoji"]]
-			for game_name, game_config in games_to_remove:
-				# TODO: only remove if it only contains emoji data otherwise only delete the emoji data instead and keep rest of config
-				self.log.info(f"Removing game {game_name} from config because it used the removed emoji {emoji_to_remove['emoji']}, config: {game_config}")
-				guild_config["games"].pop(game_name, None)
+			# Drop the removed emoji from any game that used it, keeping the rest of its config
+			# NOTE: do not reuse game_name/game_config here, they are still needed below
+			games_to_clear = [(name, data) for name, data in guild_config["games"].items() if data.get("emoji") == emoji_to_remove["emoji"]]
+			for cleared_name, cleared_config in games_to_clear:
+				cleared_config.pop("emoji", None)
+				if cleared_config:
+					self.log.info(f"Removed emoji {emoji_to_remove['emoji']} from game {cleared_name}, remaining config: {cleared_config}")
+				else:
+					self.log.info(f"Removing game {cleared_name} from config because it only held the removed emoji {emoji_to_remove['emoji']}")
+					guild_config["games"].pop(cleared_name, None)
 
 		emoji_obj = await guild.create_custom_emoji(name=emoji_name, image=image_data)
 		self.log.info(f"Uploaded emoji {str(emoji_obj)} for game {activity_name}")
 
 		self.config.set_emoji(guild_config, emoji_obj) # Ensure the emoji is in the config
 		# add emoji to game config
-		game_config = GameData()
+		game_config = guild_config["games"].setdefault(game_name, GameData())
 		game_config["emoji"] = str(emoji_obj)
-		guild_config["games"][game_name] = game_config
 
 		self.config.save()
 		return str(emoji_obj)
