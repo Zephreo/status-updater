@@ -147,10 +147,17 @@ def emoji_name_for(game_name: str) -> str:
 
 def resolve_game_config(config: GuildData, game_name: str) -> GameData | None:
 	"""Gets the config for a game, falling back to the main game's config for a demo."""
-	game_config = config["games"].get(game_name, None)
-	if game_config is not None:
-		return game_config
-	return config["games"].get(base_game_name(game_name), None)
+	for name in (game_name, base_game_name(game_name)):
+		game_config = config["games"].get(name, None)
+		if game_config is not None:
+			return game_config
+	# Fall back to a case-insensitive match, e.g. "ROBLOX" vs "Roblox"
+	for name in (game_name, base_game_name(game_name)):
+		folded = name.casefold()
+		for key, game_config in config["games"].items():
+			if key.casefold() == folded:
+				return game_config
+	return None
 
 def resolve_game_name(config: GuildData, game_name: str) -> str:
 	"""Applies any display_name override, keeping the 'Demo' suffix when it came from the main game."""
@@ -535,6 +542,13 @@ class StatusUpdater(commands.Cog):
 				game_config["emoji"] = guild_config["emojis"][emoji_name]["emoji"]
 				guild_config["games"][game_name] = game_config
 			return guild_config["emojis"][emoji_name]["emoji"]
+		# Reuse an emoji with the same name already in the guild (e.g. manually added, not bot managed)
+		existing_emoji = discord.utils.get(guild.emojis, name=emoji_name)
+		if existing_emoji is not None:
+			self.log.info(f"Reusing existing guild emoji {str(existing_emoji)} for {activity_name}")
+			guild_config["games"].setdefault(game_name, GameData())["emoji"] = str(existing_emoji)
+			self.config.save()
+			return str(existing_emoji)
 
 		# Skip if this app has hit the failure threshold
 		fail_count = self._failed_image_fetches.get(activity_name, 0)
