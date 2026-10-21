@@ -178,3 +178,6 @@ config.json
 /cache
 CLAUDE.md
 AGENTS.md
+
+# Separately-versioned extension repos, loaded by cog/bot.py
+/extensions/
