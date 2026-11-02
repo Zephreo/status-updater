@@ -20,9 +20,9 @@ from pathlib import Path
 METRICS_FILE = Path(__file__).with_name('gg_sans_metrics.json')
 
 FONT_SIZE = 16  # px, message text at the default chat font scaling (1rem)
-# px at 100% zoom: the widest line known to fit in the chat column without wrapping. Two
-# screenshots of /ow q (2026-11-02, at 1x and 1.25x) both had a 355px line fit, and their
-# wraps put the column at 355-363px.
+# px at 100% zoom: the widest line known to fit without wrapping in a voice channel's chat,
+# which opens in a narrow panel beside the call. Two screenshots of /ow q there (2026-11-02,
+# at 1x and 1.25x) both had a 355px line fit, and their wraps put the panel at 355-363px.
 CHAT_WIDTH = 355
 EMOJI_SIZE = 1.375  # em, emojis next to text (Discord's --custom-emoji-size-emoji)
 CODE_SCALE = 0.85  # `inline code` is 85% of the text's size, in gg mono
