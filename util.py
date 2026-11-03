@@ -13,6 +13,8 @@ import asyncio
 from PIL import Image, ImageSequence
 from io import BytesIO
 
+log = logging.getLogger('voice-channel-status')
+
 INSTANCE_LOCK_PORT = 47372
 _instance_lock_socket: socket.socket | None = None
 
@@ -40,7 +42,7 @@ def acquire_instance_lock(
         try:
             sock.bind(('127.0.0.1', port))
             _instance_lock_socket = sock
-            logging.debug(f"[instance-lock] Acquired lock on port {port}")
+            log.debug(f"[instance-lock] Acquired lock on port {port}")
             return
         except OSError:
             sock.close()
@@ -53,7 +55,7 @@ def acquire_instance_lock(
                     file=sys.stderr,
                 )
                 sys.exit(1)
-            logging.debug(
+            log.debug(
                 f"[instance-lock] Port {port} busy, retrying in {retry_interval}s "
                 f"({remaining:.1f}s left, attempt {attempt})..."
             )
@@ -78,10 +80,10 @@ async def wait_for_connection(url: str = "https://www.google.com", max_retries: 
                         return True
         except Exception as e:
             if attempt < max_retries - 1 or max_retries < 0:
-                logging.debug(f"Connection attempt {attempt + 1} failed: {e}")
+                log.debug(f"Connection attempt {attempt + 1} failed: {e}")
                 await asyncio.sleep(retry_delay)
             else:
-                logging.error(f"Failed to connect after {max_retries} attempts: {e}")
+                log.error(f"Failed to connect after {max_retries} attempts: {e}")
                 return False
     return False
 
