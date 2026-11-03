@@ -41,7 +41,9 @@ Create a .env file that contains the bot's token and a data.json file that conta
  DISCORD_TOKEN=<Discord Bot Token>
  STEAM_KEY=<Steam Key>
  X_SUPER_PROPERTIES=<Valid Discord super properties of bot>
+ ADMIN_USER_IDS=<Comma-separated Discord user IDs of the admins, who can run commands that change things>
 ```
+Commands can be used from a user install too, so enable **User Install** under Installation in the Discord Developer Portal.
 
 ### 7. Run the bot.
 ```bash

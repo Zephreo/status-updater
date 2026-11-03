@@ -6,6 +6,7 @@ import socket
 import sys
 import time
 import discord
+from discord import app_commands
 import aiohttp
 import logging
 import asyncio
@@ -88,6 +89,15 @@ def ephemeral(interaction: discord.Interaction) -> bool:
     """Whether a command's reply should be ephemeral: yes in servers, no in DMs, where
     only the user sees it anyway and an ephemeral reply would disappear later."""
     return interaction.guild_id is not None
+
+def admins_only():
+    """Limits an app command to the admins: the users listed in ADMIN_USER_IDS in .env (comma-separated IDs).
+    Put it on every command that changes something; cog/bot.py tells everyone else they can't use it."""
+    def predicate(interaction: discord.Interaction) -> bool:
+        if str(interaction.user.id) not in {part.strip() for part in os.getenv('ADMIN_USER_IDS', '').split(',')}:
+            raise app_commands.CheckFailure("You're not allowed to use this command.")
+        return True
+    return app_commands.check(predicate)
 
 async def get_nth_msg(
     channel: discord.TextChannel | discord.Thread,

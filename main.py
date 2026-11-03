@@ -30,7 +30,14 @@ asyncio.run(util.wait_for_connection())
 
 # Configure the bot. The 'command_prefix' parameter is required
 # but it's not being used so we set it to something random.
-bot = commands.Bot(command_prefix='(╯°□°)╯', intents=intents)
+# Every command can be used from a server install or a user install,
+# in servers, DMs with the bot, and other DMs and group DMs.
+bot = commands.Bot(
+	command_prefix='(╯°□°)╯',
+	intents=intents,
+	allowed_installs=discord.app_commands.AppInstallationType(guild=True, user=True),
+	allowed_contexts=discord.app_commands.AppCommandContext(guild=True, dm_channel=True, private_channel=True),
+)
 
 # Load the first cog located at 'cog/bot.py'.
 asyncio.run(bot.load_extension('cog.bot'))

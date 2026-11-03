@@ -202,6 +202,7 @@ class StatusUpdater(commands.Cog):
 		self._member_games[member.id] = current_games
 
 	@app_commands.command(name='toggle', description="Toggle Voice Status updates for this channel")
+	@util.admins_only()
 	async def toggle(
         self,
         interaction: discord.Interaction
@@ -225,6 +226,7 @@ class StatusUpdater(commands.Cog):
 		self.log.info(f"{message} '{channel.name}'")
 
 	@app_commands.command(name='update', description="Force an update of the Voice Status")
+	@util.admins_only()
 	async def update(self, interaction: discord.Interaction) -> None:
 		self.log.info(f"User '{interaction.user.name}' ran /update command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
@@ -261,6 +263,7 @@ class StatusUpdater(commands.Cog):
 		await interaction.response.send_message(message, ephemeral=util.ephemeral(interaction))
 
 	@app_commands.command(name='emoji', description="Edit config for the game, usually to add an emoji")
+	@util.admins_only()
 	@app_commands.describe(
         action="Whether to add, remove, ignore, or merge an emoji",
         emoji="The emoji to add/remove, or two emojis separated by space for merge (keep second→first)",
@@ -384,6 +387,7 @@ class StatusUpdater(commands.Cog):
 		self.config.save()
 
 	@app_commands.command(name='config', description="Edit config for this guild")
+	@util.admins_only()
 	@app_commands.describe(
 		key="The key to edit",
 		value="The value to set the key to",
@@ -502,6 +506,7 @@ class StatusUpdater(commands.Cog):
 		return maybe_defer, send
 
 	@app_commands.command(name='reload', description="Restart the bot cause it broke")
+	@util.admins_only()
 	async def reload(self, interaction: discord.Interaction) -> None:
 		self.log.warning(f"User '{interaction.user.name}' ran /reload command for channel '{getattr(interaction.channel, 'name', None)}'")
 		await interaction.response.send_message("Reloading...", ephemeral=util.ephemeral(interaction))

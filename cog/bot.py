@@ -7,7 +7,10 @@ command tree when the bot is ready.
 import logging
 import pkgutil
 from pathlib import Path
+import discord
+from discord import app_commands
 from discord.ext import commands
+import util
 
 
 # The list of cogs to load.
@@ -28,6 +31,17 @@ class Bot(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self._bot = bot
+        self._default_on_error = bot.tree.on_error
+        bot.tree.error(self._on_app_command_error)
+
+    async def _on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+        """Tells the user when a check stops them running a command (e.g. util.admins_only).
+        Other errors are logged as usual."""
+        if not isinstance(error, app_commands.CheckFailure):
+            await self._default_on_error(interaction, error)
+            return
+        send = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+        await send(str(error), ephemeral=util.ephemeral(interaction))
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
