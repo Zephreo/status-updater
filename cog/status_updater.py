@@ -211,7 +211,7 @@ class StatusUpdater(commands.Cog):
 		channel = interaction.channel
 		# Check if this is a voice channel
 		if guild is None or channel is None or not isinstance(channel, VoiceChannel) or interaction.channel_id not in [vc.id for vc in guild.voice_channels]:
-			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
+			await interaction.response.send_message("This is not a voice channel", ephemeral=util.ephemeral(interaction))
 			return
 		config = self.config.get_channel(guild.id, interaction.channel_id)
 		config["active"] = not config["active"]
@@ -221,7 +221,7 @@ class StatusUpdater(commands.Cog):
 			message = "Disabled Voice Status updates for this channel"
 			config["current_message"] = None
 		self.config.save()
-		await interaction.response.send_message(message, ephemeral=True)
+		await interaction.response.send_message(message, ephemeral=util.ephemeral(interaction))
 		self.log.info(f"{message} '{channel.name}'")
 
 	@app_commands.command(name='update', description="Force an update of the Voice Status")
@@ -231,23 +231,23 @@ class StatusUpdater(commands.Cog):
 		channel = interaction.channel
 		# Check if this is a voice channel
 		if guild is None or channel is None or not isinstance(channel, VoiceChannel) or interaction.channel_id not in [vc.id for vc in guild.voice_channels]:
-			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
+			await interaction.response.send_message("This is not a voice channel", ephemeral=util.ephemeral(interaction))
 			return
 		self.config.get_channel(guild.id, interaction.channel_id)["current_message"] = None
 		await self.update_vc_status(guild, interaction.channel_id, True)
 		self.config.save()
-		await interaction.response.send_message("Updated Voice Status", ephemeral=True)
+		await interaction.response.send_message("Updated Voice Status", ephemeral=util.ephemeral(interaction))
 
 	@app_commands.command(name='debug', description="Debug the current voice channel status")
 	async def debug(self, interaction: discord.Interaction) -> None:
 		self.log.info(f"User '{interaction.user.name}' ran /debug command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
 		if guild is None or interaction.channel_id is None:
-			await interaction.response.send_message("This is not a guild", ephemeral=True)
+			await interaction.response.send_message("This is not a guild", ephemeral=util.ephemeral(interaction))
 			return
 		channel = guild.get_channel(interaction.channel_id)
 		if channel is None or not isinstance(channel, VoiceChannel) or interaction.channel_id not in [vc.id for vc in guild.voice_channels]:
-			await interaction.response.send_message("This is not a voice channel", ephemeral=True)
+			await interaction.response.send_message("This is not a voice channel", ephemeral=util.ephemeral(interaction))
 			return
 		guild_config = self.config.get_guild(guild.id)
 		config = self.config.get_channel(guild.id, interaction.channel_id)
@@ -258,7 +258,7 @@ class StatusUpdater(commands.Cog):
 		message = f"All activities: {activities}\nTracked games: {tracked}\nConfig: {config}"
 		self.log.info([(member.name, activity) for member in members for activity in member.activities])
 		self.log.info(message)
-		await interaction.response.send_message(message, ephemeral=True)
+		await interaction.response.send_message(message, ephemeral=util.ephemeral(interaction))
 
 	@app_commands.command(name='emoji', description="Edit config for the game, usually to add an emoji")
 	@app_commands.describe(
@@ -280,17 +280,17 @@ class StatusUpdater(commands.Cog):
 		guild = interaction.guild
 		# Check if this is a voice channel
 		if guild is None:
-			await interaction.response.send_message("Must be run in the server where the emoji is to be added", ephemeral=True)
+			await interaction.response.send_message("Must be run in the server where the emoji is to be added", ephemeral=util.ephemeral(interaction))
 			return
 		config = self.config.get_guild(guild.id)
 
 		if action == "merge":
 			if emoji is None:
-				await interaction.response.send_message("Provide two emojis separated by a space: `/emoji merge <keep> <remove>`", ephemeral=True)
+				await interaction.response.send_message("Provide two emojis separated by a space: `/emoji merge <keep> <remove>`", ephemeral=util.ephemeral(interaction))
 				return
 			parts = emoji.strip().split()
 			if len(parts) != 2:
-				await interaction.response.send_message("Provide exactly two emojis separated by a space: `/emoji merge <keep> <remove>`", ephemeral=True)
+				await interaction.response.send_message("Provide exactly two emojis separated by a space: `/emoji merge <keep> <remove>`", ephemeral=util.ephemeral(interaction))
 				return
 			keep_emoji, remove_emoji = parts[0], parts[1]
 
@@ -325,7 +325,7 @@ class StatusUpdater(commands.Cog):
 			games_str = ", ".join(games_updated) if games_updated else "none"
 			await interaction.response.send_message(
 				f"Merged {remove_emoji} → {keep_emoji}. Updated games: {games_str}. Emoji deleted: {emoji_id_to_delete is not None}",
-				ephemeral=True
+				ephemeral=util.ephemeral(interaction)
 			)
 			self.log.info(f"Merged emoji {remove_emoji} into {keep_emoji}, updated games: {games_str}")
 			self.config.save()
@@ -336,21 +336,21 @@ class StatusUpdater(commands.Cog):
 		else:
 			member = guild.get_member(target_user.id)
 		if member is None:
-			await interaction.response.send_message("Failed to get user data", ephemeral=True)
+			await interaction.response.send_message("Failed to get user data", ephemeral=util.ephemeral(interaction))
 			return
 		tracked_games = self.get_tracked_games(member, config)
 		if not tracked_games or len(tracked_games) < 1 or tracked_games[0] is None:
-			await interaction.response.send_message("You are not playing any games.", ephemeral=True)
+			await interaction.response.send_message("You are not playing any games.", ephemeral=util.ephemeral(interaction))
 			return
 		game = tracked_games[0]
 		if len(tracked_games) > 1:
-			await interaction.response.send_message("You are playing multiple games. Aborting..", ephemeral=True)
+			await interaction.response.send_message("You are playing multiple games. Aborting..", ephemeral=util.ephemeral(interaction))
 			return
 		game_name = game if isinstance(game, str) else str(game.name)
 		game_config: GameData | None = config["games"].get(game_name, None)
 		if action == "remove":
 			if game_config is None or "emoji" not in game_config:
-				await interaction.response.send_message(f"You have not added an emoji for this game. {game_name}", ephemeral=True)
+				await interaction.response.send_message(f"You have not added an emoji for this game. {game_name}", ephemeral=util.ephemeral(interaction))
 				return
 			emoji = game_config.pop("emoji", None)
 			await interaction.response.send_message(f"Removed emoji {emoji} for game {game_name}")
@@ -361,7 +361,7 @@ class StatusUpdater(commands.Cog):
 			if emoji is None and display_name is None:
 				emoji = await self.upload_emoji(guild, game, maybe_defer)
 				if emoji is None:
-					await send_message(f"Invalid input ({emoji}, {display_name})", ephemeral=True)
+					await send_message(f"Invalid input ({emoji}, {display_name})", ephemeral=util.ephemeral(interaction))
 					return
 			if game_config is None:
 				game_config = GameData()
@@ -372,14 +372,14 @@ class StatusUpdater(commands.Cog):
 				config["emojis"].pop(game_name, None)  # Remove emoji from auto emoji list
 			if display_name is not None:
 				game_config['display_name'] = display_name
-			await send_message(f"Added emoji {emoji} for game {game_name}", ephemeral=True)
+			await send_message(f"Added emoji {emoji} for game {game_name}", ephemeral=util.ephemeral(interaction))
 			self.log.info(f"Added emoji {emoji} for game {game_name}")
 		elif action == "ignore":
 			if game_config is None:
 				game_config = GameData()
 				config["games"][game_name] = game_config
 			config["games"][game_name]["ignore"] = not config["games"][game_name].get("ignore", False)
-			await interaction.response.send_message(f"{'Ignored' if config['games'][game_name]['ignore'] else 'Unignored'} game {game_name}", ephemeral=True)
+			await interaction.response.send_message(f"{'Ignored' if config['games'][game_name]['ignore'] else 'Unignored'} game {game_name}", ephemeral=util.ephemeral(interaction))
 			self.log.info(f"{'Ignored' if config['games'][game_name]['ignore'] else 'Unignored'} game {game_name}")
 		self.config.save()
 
@@ -401,13 +401,13 @@ class StatusUpdater(commands.Cog):
 		guild = interaction.guild
 		# Check if this is a voice channel
 		if guild is None:
-			await interaction.response.send_message("Must be run in the server where the config is to be added", ephemeral=True)
+			await interaction.response.send_message("Must be run in the server where the config is to be added", ephemeral=util.ephemeral(interaction))
 			return
 		member = interaction.user
 		if target_user is not None:
 			member = target_user
 		if member is None:
-			await interaction.response.send_message("Failed to get user data", ephemeral=True)
+			await interaction.response.send_message("Failed to get user data", ephemeral=util.ephemeral(interaction))
 			return
 		if key == "steam_id":
 			member_config = self.config.get_member(guild.id, member.id)
@@ -415,14 +415,14 @@ class StatusUpdater(commands.Cog):
 				member_config.pop("steam_id", None)
 			else:
 				member_config["steam_id"] = value
-			await interaction.response.send_message(f"Set steam_id to {value} for {member.name}", ephemeral=True)
+			await interaction.response.send_message(f"Set steam_id to {value} for {member.name}", ephemeral=util.ephemeral(interaction))
 		if key == "roblox_id":
 			member_config = self.config.get_member(guild.id, member.id)
 			if value is None:
 				member_config.pop("roblox_id", None)
 			else:
 				member_config["roblox_id"] = value
-			await interaction.response.send_message(f"Set roblox_id to {value} for {member.name}", ephemeral=True)
+			await interaction.response.send_message(f"Set roblox_id to {value} for {member.name}", ephemeral=util.ephemeral(interaction))
 		if key == "emoji_create_limit":
 			guild_config = self.config.get_guild(guild.id)
 			limit_value = DEFAULT_EMOJI_CREATE_LIMIT
@@ -433,13 +433,13 @@ class StatusUpdater(commands.Cog):
 				try:
 					limit_value = int(value)
 					if limit_value < 0:
-						await interaction.response.send_message("Emoji create limit must be a positive integer", ephemeral=True)
+						await interaction.response.send_message("Emoji create limit must be a positive integer", ephemeral=util.ephemeral(interaction))
 						return
 					guild_config["emoji_create_limit"] = limit_value
 				except ValueError as e:
-					await interaction.response.send_message(f"Invalid value for emoji_create_limit: {e}", ephemeral=True)
+					await interaction.response.send_message(f"Invalid value for emoji_create_limit: {e}", ephemeral=util.ephemeral(interaction))
 					return
-			await interaction.response.send_message(f"Set emoji_create_limit to {limit_value} for {guild.name} (was {original_value})", ephemeral=True)
+			await interaction.response.send_message(f"Set emoji_create_limit to {limit_value} for {guild.name} (was {original_value})", ephemeral=util.ephemeral(interaction))
 		self.config.prune(guild.id, guild.voice_channels)
 		self.config.save()
 
@@ -452,31 +452,31 @@ class StatusUpdater(commands.Cog):
 		self.log.info(f"User '{interaction.user.name}' ran /get_icon command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
 		if guild is None:
-			await interaction.response.send_message("Must be run in a server to fetch activity data from user", ephemeral=True)
+			await interaction.response.send_message("Must be run in a server to fetch activity data from user", ephemeral=util.ephemeral(interaction))
 			return
 		if target_user is None:
 			member = guild.get_member(interaction.user.id)
 		else:
 			member = guild.get_member(target_user.id)
 		if member is None:
-			await interaction.response.send_message("Failed to get user data", ephemeral=True)
+			await interaction.response.send_message("Failed to get user data", ephemeral=util.ephemeral(interaction))
 			return
 		config = self.config.get_guild(guild.id)
 		tracked_games = self.get_game_info(member, config)
 		tracked_games = [info for info in tracked_games if (resolve_game_config(config, str(info.name)) or GameData()).get("ignore", False) is not True]
 		if not tracked_games or len(tracked_games) < 1 or tracked_games[0] is None:
-			await interaction.response.send_message("User is not playing any games.", ephemeral=True)
+			await interaction.response.send_message("User is not playing any games.", ephemeral=util.ephemeral(interaction))
 			return
 		game = tracked_games[0]
 		if self.icon_list is None:
-			await interaction.response.send_message("Icon list not initialized yet. Please try again in a moment.", ephemeral=True)
+			await interaction.response.send_message("Icon list not initialized yet. Please try again in a moment.", ephemeral=util.ephemeral(interaction))
 			return
 		maybe_defer, send_message = self.make_defer_callback(interaction)
 		icon_url = await self.icon_list.get_game_image(game, source, maybe_defer)
 		if icon_url is None:
-			await send_message("Unable to get game url for this game.", ephemeral=True)
+			await send_message("Unable to get game url for this game.", ephemeral=util.ephemeral(interaction))
 			return
-		await send_message(icon_url, ephemeral=True)
+		await send_message(icon_url, ephemeral=util.ephemeral(interaction))
 
 	@staticmethod
 	def make_defer_callback(interaction: discord.Interaction) -> tuple[Callable[[], Awaitable[None]], Callable[..., Awaitable[None]]]:
@@ -490,7 +490,7 @@ class StatusUpdater(commands.Cog):
 		async def maybe_defer():
 			nonlocal deferred
 			if not deferred:
-				await interaction.response.defer(thinking=True, ephemeral=True)
+				await interaction.response.defer(thinking=True, ephemeral=util.ephemeral(interaction))
 				deferred = True
 
 		async def send(*args, **kwargs):
@@ -504,7 +504,7 @@ class StatusUpdater(commands.Cog):
 	@app_commands.command(name='reload', description="Restart the bot cause it broke")
 	async def reload(self, interaction: discord.Interaction) -> None:
 		self.log.warning(f"User '{interaction.user.name}' ran /reload command for channel '{getattr(interaction.channel, 'name', None)}'")
-		await interaction.response.send_message("Reloading...", ephemeral=True)
+		await interaction.response.send_message("Reloading...", ephemeral=util.ephemeral(interaction))
 		# Release the instance lock before exec so the replacement process can
 		# acquire it immediately on its first attempt instead of hitting the retry loop.
 		if util._instance_lock_socket is not None:

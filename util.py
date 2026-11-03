@@ -84,6 +84,11 @@ async def wait_for_connection(url: str = "https://www.google.com", max_retries: 
                 return False
     return False
 
+def ephemeral(interaction: discord.Interaction) -> bool:
+    """Whether a command's reply should be ephemeral: yes in servers, no in DMs, where
+    only the user sees it anyway and an ephemeral reply would disappear later."""
+    return interaction.guild_id is not None
+
 async def get_nth_msg(
     channel: discord.TextChannel | discord.Thread,
     n: int
