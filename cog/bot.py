@@ -40,8 +40,18 @@ class Bot(commands.Cog):
         if not isinstance(error, app_commands.CheckFailure):
             await self._default_on_error(interaction, error)
             return
-        send = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+        logging.getLogger('voice-channel-status').warning(f"User '{interaction.user.name}' was refused: {error}")
+        send =interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
         await send(str(error), ephemeral=util.ephemeral(interaction))
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
+        """Logs every slash command that's run, the core cogs' and extensions' alike."""
+        if interaction.type is not discord.InteractionType.application_command:
+            return
+        name = interaction.command.qualified_name if interaction.command else (interaction.data or {}).get('name')
+        logging.getLogger('voice-channel-status').info(
+            f"User '{interaction.user.name}' ran /{name} command for channel '{getattr(interaction.channel, 'name', None)}'")
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:

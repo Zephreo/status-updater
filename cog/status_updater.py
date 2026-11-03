@@ -207,7 +207,6 @@ class StatusUpdater(commands.Cog):
         self,
         interaction: discord.Interaction
     ) -> None:
-		self.log.info(f"User '{interaction.user.name}' ran /toggle command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
 		channel = interaction.channel
 		# Check if this is a voice channel
@@ -228,7 +227,6 @@ class StatusUpdater(commands.Cog):
 	@app_commands.command(name='update', description="Force an update of the Voice Status")
 	@util.admins_only()
 	async def update(self, interaction: discord.Interaction) -> None:
-		self.log.info(f"User '{interaction.user.name}' ran /update command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
 		channel = interaction.channel
 		# Check if this is a voice channel
@@ -242,7 +240,6 @@ class StatusUpdater(commands.Cog):
 
 	@app_commands.command(name='debug', description="Debug the current voice channel status")
 	async def debug(self, interaction: discord.Interaction) -> None:
-		self.log.info(f"User '{interaction.user.name}' ran /debug command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
 		if guild is None or interaction.channel_id is None:
 			await interaction.response.send_message("This is not a guild", ephemeral=util.ephemeral(interaction))
@@ -279,7 +276,6 @@ class StatusUpdater(commands.Cog):
 		target_user: discord.User | None
 	) -> None:
 		"""Adds or removes an emoji for a user's currently active game."""
-		self.log.info(f"User '{interaction.user.name}' ran /emoji command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
 		# Check if this is a voice channel
 		if guild is None:
@@ -401,7 +397,6 @@ class StatusUpdater(commands.Cog):
 		target_user: discord.User | None
 	) -> None:
 		"""Adds or removes config values for a user."""
-		self.log.info(f"User '{interaction.user.name}' ran /config command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
 		# Check if this is a voice channel
 		if guild is None:
@@ -453,7 +448,6 @@ class StatusUpdater(commands.Cog):
 		source="The service to pick the icon from (defaults to first available if omitted)"
     )
 	async def get_icon(self, interaction: discord.Interaction, target_user: discord.User | None, source: Literal["discord", "steam"] | None) -> None:
-		self.log.info(f"User '{interaction.user.name}' ran /get_icon command for channel '{getattr(interaction.channel, 'name', None)}'")
 		guild = interaction.guild
 		if guild is None:
 			await interaction.response.send_message("Must be run in a server to fetch activity data from user", ephemeral=util.ephemeral(interaction))
@@ -508,7 +502,6 @@ class StatusUpdater(commands.Cog):
 	@app_commands.command(name='reload', description="Restart the bot cause it broke")
 	@util.admins_only()
 	async def reload(self, interaction: discord.Interaction) -> None:
-		self.log.warning(f"User '{interaction.user.name}' ran /reload command for channel '{getattr(interaction.channel, 'name', None)}'")
 		await interaction.response.send_message("Reloading...", ephemeral=util.ephemeral(interaction))
 		# Release the instance lock before exec so the replacement process can
 		# acquire it immediately on its first attempt instead of hitting the retry loop.
