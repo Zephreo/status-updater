@@ -50,8 +50,18 @@ class Bot(commands.Cog):
         if interaction.type is not discord.InteractionType.application_command:
             return
         name = interaction.command.qualified_name if interaction.command else (interaction.data or {}).get('name')
-        logging.getLogger('voice-channel-status').info(
-            f"User '{interaction.user.name}' ran /{name} command for channel '{getattr(interaction.channel, 'name', None)}'")
+        logging.getLogger('voice-channel-status').info(f"User '{interaction.user.name}' ran /{name} command {self._where(interaction)}")
+
+    @staticmethod
+    def _where(interaction: discord.Interaction) -> str:
+        """Where a command was run, for the log: a server channel, a DM with the bot, or (with a user install)
+        another DM or a group DM. Discord doesn't say who else is in a DM, so that isn't shown."""
+        channel = interaction.channel
+        if isinstance(channel, discord.GroupChannel):
+            return f"in group DM '{channel.name}'" if channel.name else "in a group DM"
+        if interaction.guild_id is None:
+            return "in a DM with the bot" if interaction.context.dm_channel else "in a DM"
+        return f"for channel '{getattr(channel, 'name', None)}'"
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
