@@ -5,7 +5,8 @@
 // declares Discord's fonts, so this measures exactly what the client draws messages with.
 (async () => {
     const weights = ['400', '700'];  // Regular and **bold**
-    const extraChars = '‘’“”–—…•·€™';
+    // Then the three-per-em and six-per-em spaces, which text_width.padding mixes in
+    const extraChars = '‘’“”–—…•·€™  ';
     await Promise.all([
         ...weights.map(w => document.fonts.load(`${w} 1000px "gg sans"`, 'a')),
         document.fonts.load('400 1000px "gg mono"', 'a'),

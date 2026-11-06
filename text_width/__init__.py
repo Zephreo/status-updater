@@ -9,6 +9,8 @@ and match the browser's layout to within about half a pixel; pass font_size for 
 line_width understands custom and unicode emojis, **bold**, `inline code`, and lines
 starting with '# ', '## ', '### ' or '-# '. Other markdown is measured as plain text,
 and so are mentions, since their names aren't known here.
+
+padding gives whitespace of a given width, for lining text up in columns.
 """
 
 import json
@@ -21,9 +23,9 @@ METRICS_FILE = Path(__file__).with_name('gg_sans_metrics.json')
 
 FONT_SIZE = 16  # px, message text at the default chat font scaling (1rem)
 # px at 100% zoom: the widest line known to fit without wrapping in a voice channel's chat,
-# which opens in a narrow panel beside the call. Two screenshots of /ow q there (2026-11-02,
-# at 1x and 1.25x) both had a 355px line fit, and their wraps put the panel at 355-363px.
-CHAT_WIDTH = 355
+# which opens in a narrow panel beside the call. Its width varies: two screenshots of /ow q
+# there (2026-11-02) put it at 355-363px, and a later one (2026-11-05) at 338.4-352.2px.
+CHAT_WIDTH = 338
 EMOJI_SIZE = 1.375  # em, emojis next to text (Discord's --custom-emoji-size-emoji)
 CODE_SCALE = 0.85  # `inline code` is 85% of the text's size, in gg mono
 CODE_PADDING = 0.2  # em of the code's size, on each side
@@ -35,6 +37,13 @@ REGULAR, BOLD = '400', '700'
 # Characters that take no space of their own: joiners, variation selectors, soft hyphens.
 ZERO_WIDTH = frozenset('​‌‍⁠︎️­')
 ZWJ = '‍'
+
+# Spaces padding() mixes in with normal ones: six-per-em and three-per-em, 1/6 and 1/3 of the font size. Their
+# widths aren't whole numbers of normal spaces, so a mix lands much closer to a width than normal spaces alone.
+# Three-per-em is exactly two six-per-em, so it only keeps the padding shorter. Of 16 Unicode spaces posted to
+# Discord and measured (2026-11-05), only these two were the same width on desktop and iOS; the rest drew up
+# to 97% off on iOS. Android wasn't checked.
+SIX_PER_EM, THREE_PER_EM = ' ', ' '
 
 # Pieces of a line drawn differently from the text around them: custom emojis, bold markers, inline code.
 MARKUP = re.compile(r'(<a?:\w+:\d+>|\*\*|`[^`\n]+`)')
@@ -135,3 +144,23 @@ def line_width(line: str, font_size: float = FONT_SIZE) -> float:
 def line_widths(message: str, font_size: float = FONT_SIZE) -> list[float]:
     """line_width for each line of a message."""
     return [line_width(line, font_size) for line in message.split('\n')]
+
+def padding(width: float, font_size: float = FONT_SIZE) -> str:
+    """Whitespace as close as it can get to width px wide, for lining text up in columns (Discord keeps
+    repeated spaces): normal spaces mixed with six-per-em and three-per-em ones, the fewest characters that
+    get closest, and always at least one. Lands within 0.9px (on gaps barely wider than a space, where
+    nothing narrower fits), and about a tenth of a pixel off on average."""
+    space = text_width(' ', font_size)
+    sixth = text_width(SIX_PER_EM, font_size)
+    best, best_error = ' ', float('inf')
+    # Try every count of six-per-em widths up to just past the width, filling the rest with normal spaces.
+    # Each pair is written as one three-per-em.
+    for sixths in range(int(width / sixth) + 2):
+        spaces = max(0, round((width - sixths * sixth) / space))
+        text = ' ' * spaces + THREE_PER_EM * (sixths // 2) + SIX_PER_EM * (sixths % 2)
+        if not text:
+            continue
+        error = abs(text_width(text, font_size) - width)
+        if error < best_error - 1e-6 or (error < best_error + 1e-6 and len(text) < len(best)):
+            best, best_error = text, error
+    return best
