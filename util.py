@@ -101,6 +101,24 @@ def admins_only():
         return True
     return app_commands.check(predicate)
 
+def command_summary(interaction: discord.Interaction) -> str:
+    """A slash command run, for the log, e.g. "User 'zephreo' ran /ow q command for channel 'Lobby' in 1.32s".
+    The time is from when the bot received it (cog/bot.py notes that, or failing that, when Discord did) until now."""
+    name = interaction.command.qualified_name if interaction.command else (interaction.data or {}).get('name')
+    received = interaction.extras.get('received')
+    took = time.perf_counter() - received if received is not None else (discord.utils.utcnow() - interaction.created_at).total_seconds()
+    return f"User '{interaction.user.name}' ran /{name} command {_where(interaction)} in {took:.2f}s"
+
+def _where(interaction: discord.Interaction) -> str:
+    """Where a command was run, for the log: a server channel, a DM with the bot, or (with a user install)
+    another DM or a group DM. Discord doesn't say who else is in a DM, so that isn't shown."""
+    channel = interaction.channel
+    if isinstance(channel, discord.GroupChannel):
+        return f"in group DM '{channel.name}'" if channel.name else "in a group DM"
+    if interaction.guild_id is None:
+        return "in a DM with the bot" if interaction.context.dm_channel else "in a DM"
+    return f"for channel '{getattr(channel, 'name', None)}'"
+
 async def get_nth_msg(
     channel: discord.TextChannel | discord.Thread,
     n: int

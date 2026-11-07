@@ -6,6 +6,7 @@ command tree when the bot is ready.
 
 import logging
 import pkgutil
+import time
 from pathlib import Path
 import discord
 from discord import app_commands
@@ -33,35 +34,30 @@ class Bot(commands.Cog):
         self._bot = bot
         self._default_on_error = bot.tree.on_error
         bot.tree.error(self._on_app_command_error)
+        bot.tree.interaction_check = self._received
+
+    async def _received(self, interaction: discord.Interaction) -> bool:
+        """Runs before every slash command, ahead of its checks: notes when it arrived, so its log line can
+        say how long it took (see util.command_summary)."""
+        interaction.extras['received'] = time.perf_counter()
+        return True
 
     async def _on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
-        """Tells the user when a check stops them running a command (e.g. util.admins_only).
-        Other errors are logged as usual."""
+        """Logs a command that didn't finish, and tells the user when a check stopped them running it
+        (e.g. util.admins_only). Other errors are logged as usual too."""
+        log = logging.getLogger('voice-channel-status')
         if not isinstance(error, app_commands.CheckFailure):
+            log.error(f"{util.command_summary(interaction)}, but it failed")
             await self._default_on_error(interaction, error)
             return
-        logging.getLogger('voice-channel-status').warning(f"User '{interaction.user.name}' was refused: {error}")
-        send =interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+        log.warning(f"{util.command_summary(interaction)}, but was refused: {error}")
+        send = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
         await send(str(error), ephemeral=util.ephemeral(interaction))
 
     @commands.Cog.listener()
-    async def on_interaction(self, interaction: discord.Interaction) -> None:
-        """Logs every slash command that's run, the core cogs' and extensions' alike."""
-        if interaction.type is not discord.InteractionType.application_command:
-            return
-        name = interaction.command.qualified_name if interaction.command else (interaction.data or {}).get('name')
-        logging.getLogger('voice-channel-status').info(f"User '{interaction.user.name}' ran /{name} command {self._where(interaction)}")
-
-    @staticmethod
-    def _where(interaction: discord.Interaction) -> str:
-        """Where a command was run, for the log: a server channel, a DM with the bot, or (with a user install)
-        another DM or a group DM. Discord doesn't say who else is in a DM, so that isn't shown."""
-        channel = interaction.channel
-        if isinstance(channel, discord.GroupChannel):
-            return f"in group DM '{channel.name}'" if channel.name else "in a group DM"
-        if interaction.guild_id is None:
-            return "in a DM with the bot" if interaction.context.dm_channel else "in a DM"
-        return f"for channel '{getattr(channel, 'name', None)}'"
+    async def on_app_command_completion(self, interaction: discord.Interaction, command: app_commands.Command) -> None:
+        """Logs every slash command that finishes, the core cogs' and extensions' alike, with how long it took."""
+        logging.getLogger('voice-channel-status').info(util.command_summary(interaction))
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:

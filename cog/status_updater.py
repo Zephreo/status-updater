@@ -503,6 +503,8 @@ class StatusUpdater(commands.Cog):
 	@util.admins_only()
 	async def reload(self, interaction: discord.Interaction) -> None:
 		await interaction.response.send_message("Reloading...", ephemeral=util.ephemeral(interaction))
+		# The restart means the command never finishes, so log it here rather than in cog/bot.py.
+		self.log.warning(f"{util.command_summary(interaction)}, restarting the bot")
 		# Release the instance lock before exec so the replacement process can
 		# acquire it immediately on its first attempt instead of hitting the retry loop.
 		if util._instance_lock_socket is not None:
